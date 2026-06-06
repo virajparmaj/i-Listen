@@ -1,0 +1,143 @@
+/* ============================================================
+   iListen — Design tokens
+   Silver / white / graphite system with LCD-blue accents,
+   echoing the iPod Classic menu and early iTunes utility feel.
+   ============================================================ */
+
+:root {
+  /* ---- Base palette ---- */
+  --ipod-bg:            #F8F8F4;
+  --ipod-surface:       #EDEDEA;
+  --ipod-white:         #FFFFFF;
+  --ipod-silver:        #C8C8C8;
+  --ipod-silver-soft:   #DCDCD8;
+  --ipod-silver-deep:   #B4B4B0;
+
+  --ipod-ink:           #111111;
+  --ipod-ink-soft:      #6B6B6B;
+  --ipod-graphite:      #2C2C2E;
+  --ipod-graphite-2:    #3A3A3C;
+
+  --ipod-lcd:           #8FB7D9;
+  --ipod-lcd-soft:      #C5DAEC;
+  --ipod-blue:          #3E6F9E;
+  --ipod-blue-deep:     #335B82;
+  --ipod-blue-bright:   #5B8CBE;
+
+  --ipod-green:         #7AA874;
+  --ipod-amber:         #C89B3C;
+  --ipod-red:           #B75D5D;
+
+  --ipod-select-top:    #6FA0CF;
+  --ipod-select-bottom: #3E6F9E;
+
+  /* ---- Semantic aliases ---- */
+  --bg-app:            var(--ipod-bg);
+  --surface-recessed:  var(--ipod-surface);
+  --surface-panel:     var(--ipod-white);
+  --surface-graphite:  var(--ipod-graphite);
+  --surface-lcd:       #E7F0F6;
+
+  --text-primary:      var(--ipod-ink);
+  --text-secondary:    var(--ipod-ink-soft);
+  --text-on-dark:      #F2F2F0;
+  --text-on-accent:    #FFFFFF;
+  --text-link:         var(--ipod-blue);
+
+  --border-hairline:   var(--ipod-silver);
+  --border-soft:       var(--ipod-silver-soft);
+  --border-strong:     var(--ipod-silver-deep);
+
+  --accent-primary:    var(--ipod-blue);
+  --accent-primary-hover: var(--ipod-blue-bright);
+  --accent-primary-press: var(--ipod-blue-deep);
+  --accent-lcd:        var(--ipod-lcd);
+
+  --status-success:    var(--ipod-green);
+  --status-warning:    var(--ipod-amber);
+  --status-error:      var(--ipod-red);
+
+  --status-success-soft: #E6F0E4;
+  --status-warning-soft: #F6ECD4;
+  --status-error-soft:   #F2E0E0;
+
+  --focus-ring:        #3E6F9E;
+
+  /* ---- Type ---- */
+  --font-ui: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", Arial, sans-serif;
+  --font-mono: "SF Mono", "Menlo", "Consolas", ui-monospace, monospace;
+  --font-display: "DM Serif Display", "Hoefler Text", Georgia, serif;
+  --font-deco: "Limelight", "Copperplate", "Times New Roman", serif;
+  --font-script: "Kaushan Script", "Brush Script MT", cursive;
+  --font-typewriter: "Special Elite", "Courier New", monospace;
+  --font-lcd: "VT323", "SF Mono", "Menlo", monospace;
+
+  --weight-regular: 400;
+  --weight-medium:  500;
+  --weight-semibold: 600;
+  --weight-bold:    700;
+
+  --text-display:   40px;
+  --text-h1:        30px;
+  --text-h2:        24px;
+  --text-h3:        19px;
+  --text-body-lg:   17px;
+  --text-body:      15px;
+  --text-sm:        13px;
+  --text-xs:        11px;
+  --text-mono:      13px;
+
+  --leading-tight:  1.15;
+  --leading-snug:   1.3;
+  --leading-normal: 1.5;
+
+  --tracking-tight: -0.02em;
+  --tracking-normal: 0;
+  --tracking-wide:  0.04em;
+
+  /* ---- Spacing ---- */
+  --space-1:  2px;  --space-2:  4px;  --space-3:  8px;  --space-4:  12px;
+  --space-5:  16px; --space-6:  20px; --space-7:  24px; --space-8:  32px;
+  --space-9:  40px; --space-10: 48px; --space-12: 64px; --space-16: 96px;
+
+  --control-h-sm: 28px;
+  --control-h:    36px;
+  --control-h-lg: 44px;
+  --container-max: 1120px;
+  --content-max:   720px;
+
+  /* ---- Radii ---- */
+  --radius-xs:  4px;
+  --radius-sm:  6px;
+  --radius-md:  10px;
+  --radius-lg:  14px;
+  --radius-xl:  20px;
+  --radius-pill: 999px;
+  --radius-ipod: 18px;
+
+  /* ---- Shadows ---- */
+  --shadow-card:
+    0 1px 2px rgba(17, 17, 17, 0.06),
+    0 2px 8px rgba(17, 17, 17, 0.06);
+  --shadow-raised:
+    0 2px 4px rgba(17, 17, 17, 0.08),
+    0 8px 24px rgba(17, 17, 17, 0.10);
+  --shadow-float:
+    0 8px 16px rgba(17, 17, 17, 0.10),
+    0 24px 48px rgba(17, 17, 17, 0.16);
+  --shadow-inset:
+    inset 0 1px 2px rgba(17, 17, 17, 0.10),
+    inset 0 0 0 1px rgba(17, 17, 17, 0.04);
+
+  --gloss-top: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  --gloss-top-dark: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --ring-focus: 0 0 0 3px rgba(62, 111, 158, 0.35);
+
+  /* ---- Surface gradients ---- */
+  --grad-panel:   linear-gradient(180deg, #FFFFFF 0%, #F4F4F1 100%);
+  --grad-chrome:  linear-gradient(180deg, #FAFAF8 0%, #E4E4E0 100%);
+  --grad-graphite: linear-gradient(180deg, #3A3A3C 0%, #2C2C2E 100%);
+  --grad-select:  linear-gradient(180deg, var(--ipod-select-top) 0%, var(--ipod-select-bottom) 100%);
+  --grad-primary: linear-gradient(180deg, var(--ipod-blue-bright) 0%, var(--ipod-blue) 100%);
+  --grad-lcd:     linear-gradient(180deg, #EEF4F8 0%, #DCE8F0 100%);
+}

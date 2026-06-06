@@ -1,0 +1,93 @@
+/* ============================================================
+   iListen — global base styles & resets
+   ============================================================ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--text-body);
+  line-height: var(--leading-normal);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, p { margin: 0; }
+
+button { font-family: inherit; }
+
+a { color: var(--text-link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Faint early-Aqua pinstripe behind the whole app */
+.il-desktop {
+  min-height: 100%;
+  background-image: repeating-linear-gradient(
+    180deg, rgba(255, 255, 255, 0.45) 0 1px, transparent 1px 5px
+  );
+}
+
+/* Custom thin scrollbars to match the utility feel */
+.il-scroll::-webkit-scrollbar { width: 12px; height: 12px; }
+.il-scroll::-webkit-scrollbar-track { background: var(--surface-recessed); }
+.il-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #CFCFCA, #B4B4B0);
+  border: 2px solid var(--surface-recessed);
+  border-radius: var(--radius-pill);
+}
+.il-scroll::-webkit-scrollbar-thumb:hover { background: #ADADA8; }
+
+/* Reusable micro-label */
+.il-label {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-secondary);
+  font-weight: var(--weight-semibold);
+}
+
+@keyframes il-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.il-fade-in { animation: il-fade-in 200ms ease both; }
+
+/* Range slider — brushed track + metal knob */
+.il-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-recessed);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-inset);
+  outline: none;
+  cursor: pointer;
+}
+.il-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 35%, #FFFFFF, #E2E2DE);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.9);
+}
+.il-slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 35%, #FFFFFF, #E2E2DE);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
