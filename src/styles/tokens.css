@@ -27,6 +27,8 @@
   --ipod-green:         #7AA874;
   --ipod-amber:         #C89B3C;
   --ipod-red:           #B75D5D;
+  --ipod-copper:        #9A6B3F;
+  --ipod-warm:          #F3ECDD;
 
   --ipod-select-top:    #6FA0CF;
   --ipod-select-bottom: #3E6F9E;
@@ -37,21 +39,43 @@
   --surface-panel:     var(--ipod-white);
   --surface-graphite:  var(--ipod-graphite);
   --surface-lcd:       #E7F0F6;
+  --surface-warm:      var(--ipod-warm);
+  --surface-terminal:  var(--ipod-graphite);
 
   --text-primary:      var(--ipod-ink);
   --text-secondary:    var(--ipod-ink-soft);
   --text-on-dark:      #F2F2F0;
+  --text-on-dark-soft: #C7C7CB;
+  --text-on-dark-muted:#A9A9AD;
   --text-on-accent:    #FFFFFF;
   --text-link:         var(--ipod-blue);
+  --text-lcd-strong:   #1E2A36;
+  --text-lcd:          var(--ipod-blue-deep);
+  --text-lcd-muted:    #4F6373;
+  --text-chrome-muted: #7C7C78;
+  --text-terminal:     #D6E3EC;
+  --text-terminal-muted:#7E8B95;
+  --text-warning:      #6E561C;
+  --text-warning-strong:#8A6A1E;
+  --text-success:      #4C7A47;
+  --text-error:        #8E4444;
 
   --border-hairline:   var(--ipod-silver);
   --border-soft:       var(--ipod-silver-soft);
   --border-strong:     var(--ipod-silver-deep);
+  --border-graphite:   #1C1C1E;
+  --border-lcd:        #9FB3C2;
+  --border-lcd-soft:   #A9C4DC;
+  --border-warning:    #E0CB8F;
+  --border-success:    #B9D2B4;
+  --border-error:      #DFB6B6;
 
   --accent-primary:    var(--ipod-blue);
   --accent-primary-hover: var(--ipod-blue-bright);
   --accent-primary-press: var(--ipod-blue-deep);
   --accent-lcd:        var(--ipod-lcd);
+  --accent-vintage:    var(--ipod-copper);
+  --accent-vintage-soft:#B58A61;
 
   --status-success:    var(--ipod-green);
   --status-warning:    var(--ipod-amber);
@@ -60,17 +84,21 @@
   --status-success-soft: #E6F0E4;
   --status-warning-soft: #F6ECD4;
   --status-error-soft:   #F2E0E0;
+  --terminal-success: #9FD49A;
+  --terminal-warning: #E2C172;
+  --terminal-error:   #E59A9A;
 
   --focus-ring:        #3E6F9E;
 
   /* ---- Type ---- */
   --font-ui: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", Arial, sans-serif;
-  --font-mono: "SF Mono", "Menlo", "Consolas", ui-monospace, monospace;
   --font-display: "DM Serif Display", "Hoefler Text", Georgia, serif;
   --font-deco: "Limelight", "Copperplate", "Times New Roman", serif;
   --font-script: "Kaushan Script", "Brush Script MT", cursive;
   --font-typewriter: "Special Elite", "Courier New", monospace;
   --font-lcd: "VT323", "SF Mono", "Menlo", monospace;
+  --font-terminal: "SF Mono", "Menlo", "Consolas", ui-monospace, monospace;
+  --font-mono: var(--font-typewriter);
 
   --weight-regular: 400;
   --weight-medium:  500;
@@ -91,9 +119,13 @@
   --leading-snug:   1.3;
   --leading-normal: 1.5;
 
-  --tracking-tight: -0.02em;
+  --tracking-tight: 0;
   --tracking-normal: 0;
   --tracking-wide:  0.04em;
+  --tracking-label: 0.08em;
+  --tracking-deco:  0.28em;
+  --tracking-lcd:   0.04em;
+  --tracking-badge: 0.02em;
 
   /* ---- Spacing ---- */
   --space-1:  2px;  --space-2:  4px;  --space-3:  8px;  --space-4:  12px;

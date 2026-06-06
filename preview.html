@@ -35,6 +35,8 @@
   --ipod-green:         #7AA874;
   --ipod-amber:         #C89B3C;
   --ipod-red:           #B75D5D;
+  --ipod-copper:        #9A6B3F;
+  --ipod-warm:          #F3ECDD;
 
   --ipod-select-top:    #6FA0CF;
   --ipod-select-bottom: #3E6F9E;
@@ -45,21 +47,43 @@
   --surface-panel:     var(--ipod-white);
   --surface-graphite:  var(--ipod-graphite);
   --surface-lcd:       #E7F0F6;
+  --surface-warm:      var(--ipod-warm);
+  --surface-terminal:  var(--ipod-graphite);
 
   --text-primary:      var(--ipod-ink);
   --text-secondary:    var(--ipod-ink-soft);
   --text-on-dark:      #F2F2F0;
+  --text-on-dark-soft: #C7C7CB;
+  --text-on-dark-muted:#A9A9AD;
   --text-on-accent:    #FFFFFF;
   --text-link:         var(--ipod-blue);
+  --text-lcd-strong:   #1E2A36;
+  --text-lcd:          var(--ipod-blue-deep);
+  --text-lcd-muted:    #4F6373;
+  --text-chrome-muted: #7C7C78;
+  --text-terminal:     #D6E3EC;
+  --text-terminal-muted:#7E8B95;
+  --text-warning:      #6E561C;
+  --text-warning-strong:#8A6A1E;
+  --text-success:      #4C7A47;
+  --text-error:        #8E4444;
 
   --border-hairline:   var(--ipod-silver);
   --border-soft:       var(--ipod-silver-soft);
   --border-strong:     var(--ipod-silver-deep);
+  --border-graphite:   #1C1C1E;
+  --border-lcd:        #9FB3C2;
+  --border-lcd-soft:   #A9C4DC;
+  --border-warning:    #E0CB8F;
+  --border-success:    #B9D2B4;
+  --border-error:      #DFB6B6;
 
   --accent-primary:    var(--ipod-blue);
   --accent-primary-hover: var(--ipod-blue-bright);
   --accent-primary-press: var(--ipod-blue-deep);
   --accent-lcd:        var(--ipod-lcd);
+  --accent-vintage:    var(--ipod-copper);
+  --accent-vintage-soft:#B58A61;
 
   --status-success:    var(--ipod-green);
   --status-warning:    var(--ipod-amber);
@@ -68,17 +92,21 @@
   --status-success-soft: #E6F0E4;
   --status-warning-soft: #F6ECD4;
   --status-error-soft:   #F2E0E0;
+  --terminal-success: #9FD49A;
+  --terminal-warning: #E2C172;
+  --terminal-error:   #E59A9A;
 
   --focus-ring:        #3E6F9E;
 
   /* ---- Type ---- */
   --font-ui: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", Arial, sans-serif;
-  --font-mono: "SF Mono", "Menlo", "Consolas", ui-monospace, monospace;
   --font-display: "DM Serif Display", "Hoefler Text", Georgia, serif;
   --font-deco: "Limelight", "Copperplate", "Times New Roman", serif;
   --font-script: "Kaushan Script", "Brush Script MT", cursive;
   --font-typewriter: "Special Elite", "Courier New", monospace;
   --font-lcd: "VT323", "SF Mono", "Menlo", monospace;
+  --font-terminal: "SF Mono", "Menlo", "Consolas", ui-monospace, monospace;
+  --font-mono: var(--font-typewriter);
 
   --weight-regular: 400;
   --weight-medium:  500;
@@ -99,9 +127,13 @@
   --leading-snug:   1.3;
   --leading-normal: 1.5;
 
-  --tracking-tight: -0.02em;
+  --tracking-tight: 0;
   --tracking-normal: 0;
   --tracking-wide:  0.04em;
+  --tracking-label: 0.08em;
+  --tracking-deco:  0.28em;
+  --tracking-lcd:   0.04em;
+  --tracking-badge: 0.02em;
 
   /* ---- Spacing ---- */
   --space-1:  2px;  --space-2:  4px;  --space-3:  8px;  --space-4:  12px;
@@ -197,10 +229,11 @@ a:hover { text-decoration: underline; }
 /* Reusable micro-label */
 .il-label {
   font-size: var(--text-xs);
+  font-family: var(--font-typewriter);
   text-transform: uppercase;
-  letter-spacing: var(--tracking-wide);
+  letter-spacing: var(--tracking-label);
   color: var(--text-secondary);
-  font-weight: var(--weight-semibold);
+  font-weight: var(--weight-regular);
 }
 
 @keyframes il-fade-in {
@@ -321,7 +354,7 @@ function Button({
     secondary: { background: "var(--grad-chrome)", color: "var(--text-primary)", border: "1px solid var(--border-strong)", boxShadow: "var(--shadow-card), var(--gloss-top)" },
     graphite: { background: "var(--grad-graphite)", color: "var(--text-on-dark)", border: "1px solid #1f1f21", boxShadow: "var(--shadow-card), var(--gloss-top-dark)" },
     ghost: { background: "transparent", color: "var(--accent-primary)", border: "1px solid transparent", boxShadow: "none" },
-    danger: { background: "linear-gradient(180deg, #C97373 0%, var(--status-error) 100%)", color: "#fff", border: "1px solid #9c4a4a", boxShadow: "var(--shadow-card), var(--gloss-top-dark)" },
+    danger: { background: "linear-gradient(180deg, #C97373 0%, var(--status-error) 100%)", color: "var(--text-on-accent)", border: "1px solid #9c4a4a", boxShadow: "var(--shadow-card), var(--gloss-top-dark)" },
   };
   const v = variants[variant] || variants.secondary;
 
@@ -542,7 +575,7 @@ function Checkbox({ checked = false, onChange, label, description, disabled = fa
         }}
       >
         {checked && (
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text-on-accent)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M20 6 9 17l-5-5" />
           </svg>
         )}
@@ -562,10 +595,10 @@ function Checkbox({ checked = false, onChange, label, description, disabled = fa
 function Badge({ tone = "neutral", children, iconLeft = null, style = {} }) {
   const tones = {
     neutral: { bg: "var(--surface-recessed)", fg: "var(--text-secondary)", bd: "var(--border-strong)" },
-    info: { bg: "var(--surface-lcd)", fg: "var(--accent-primary-press)", bd: "#A9C4DC" },
-    success: { bg: "var(--status-success-soft)", fg: "#4C7A47", bd: "#B9D2B4" },
-    warning: { bg: "var(--status-warning-soft)", fg: "#8A6A1E", bd: "#E0CB8F" },
-    error: { bg: "var(--status-error-soft)", fg: "#8E4444", bd: "#DFB6B6" },
+    info: { bg: "var(--surface-lcd)", fg: "var(--text-lcd)", bd: "var(--border-lcd-soft)" },
+    success: { bg: "var(--status-success-soft)", fg: "var(--text-success)", bd: "var(--border-success)" },
+    warning: { bg: "var(--status-warning-soft)", fg: "var(--text-warning-strong)", bd: "var(--border-warning)" },
+    error: { bg: "var(--status-error-soft)", fg: "var(--text-error)", bd: "var(--border-error)" },
   };
   const t = tones[tone] || tones.neutral;
   return (
@@ -576,9 +609,10 @@ function Badge({ tone = "neutral", children, iconLeft = null, style = {} }) {
         gap: 5,
         height: 20,
         padding: "0 9px",
+        fontFamily: "var(--font-typewriter)",
         fontSize: "var(--text-xs)",
-        fontWeight: "var(--weight-semibold)",
-        letterSpacing: "0.02em",
+        fontWeight: "var(--weight-regular)",
+        letterSpacing: "var(--tracking-badge)",
         borderRadius: "var(--radius-pill)",
         background: t.bg,
         color: t.fg,
@@ -628,7 +662,7 @@ function ProgressBar({ value = 0, tone = "primary", height = 8, showLabel = fals
         />
       </div>
       {showLabel && (
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", color: "var(--text-secondary)", minWidth: 34, textAlign: "right" }}>
+        <span style={{ fontFamily: "var(--font-lcd)", fontSize: 16, letterSpacing: "var(--tracking-lcd)", color: "var(--text-lcd)", minWidth: 34, textAlign: "right", lineHeight: 1 }}>
           {Math.round(pct)}%
         </span>
       )}
@@ -703,7 +737,7 @@ function Slider({ value, min = 0, max = 100, step = 1, onChange, style = {} }) {
         minWidth: 28,
         textAlign: "center",
         background: "var(--surface-lcd)",
-        border: "1px solid #A9C4DC",
+        border: "1px solid var(--border-lcd-soft)",
         borderRadius: "var(--radius-xs)",
         padding: "3px 8px",
         boxShadow: "var(--shadow-inset)",
@@ -787,7 +821,7 @@ function Modal({ open, onClose, title = "", width = 560, children, footer = null
 }
 
 /* ===== data/mockData.js ===== */
-// iListen — mock data, presets, options, and status metadata.
+// iListen — prototype data, presets, options, and status metadata.
 const PRESETS = [
   { id: "balanced", name: "iPod Balanced", spec: "MP3 VBR · highest quality", tag: "Recommended", kbps: 245, ext: "mp3" },
   { id: "max", name: "Maximum MP3", spec: "320 kbps CBR · largest size", tag: null, kbps: 320, ext: "mp3" },
@@ -816,7 +850,7 @@ const FILENAME_PATTERNS = [
 
 // status -> { label, tone }
 const STATUS = {
-  queued:      { label: "Queued", tone: "neutral" },
+  queued:      { label: "Queued for backend", tone: "neutral" },
   downloading: { label: "Downloading source", tone: "info" },
   extracting:  { label: "Extracting audio", tone: "info" },
   converting:  { label: "Converting", tone: "info" },
@@ -835,33 +869,39 @@ let _id = 0;
 const nextId = () => `trk_${++_id}`;
 
 function fmtTime(sec) {
+  if (!Number.isFinite(sec) || sec <= 0) {
+    return "Pending";
+  }
   const m = Math.floor(sec / 60);
   const s = Math.floor(sec % 60);
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 function estimateSize(durationSec, kbps) {
+  if (!Number.isFinite(durationSec) || durationSec <= 0) {
+    return "Backend pending";
+  }
   const mb = (durationSec * kbps) / 8 / 1024;
   return `${mb.toFixed(1)} MB`;
 }
 
-// Build a queue track from a pasted URL + parsed-ish title.
-function makeTrack({ url, videoTitle, artist, title, album, year, durationSec, fate = "ok", index = 0 }) {
+// Build a queued import from a pasted URL. Real metadata arrives from a backend.
+function makeTrack({ url, videoTitle, artist = "Unknown Artist", title, album = "Imported links", year = "", durationSec = null, index = 0 }) {
   return {
     id: nextId(),
     url,
     videoTitle,
     thumbColor: COVER_COLORS[index % COVER_COLORS.length],
     // metadata
-    title,
+    title: title || `Imported link ${index + 1}`,
     artist,
     album,
     albumArtist: artist,
-    year: String(year),
-    genre: "Indie",
+    year: year ? String(year) : "",
+    genre: "",
     track: String(index + 1),
     composer: "",
     producer: "",
-    comment: "",
+    comment: "Queued in the frontend prototype. Backend conversion is not connected in this build.",
     versionLabel: "",
     durationSec,
     duration: fmtTime(durationSec),
@@ -875,18 +915,8 @@ function makeTrack({ url, videoTitle, artist, title, album, year, durationSec, f
     size: estimateSize(durationSec, 245),
     warning: null,
     error: null,
-    _fate: fate,
   };
 }
-
-// A believable starting library by an artist converting their own catalog.
-const SEED_TRACKS = [
-  makeTrack({ url: "https://youtube.com/watch?v=aXr1k09", videoTitle: "Coastlines — Midnight Reel (Official Audio)", artist: "Coastlines", title: "Midnight Reel", album: "2026 - Singles", year: 2026, durationSec: 232, fate: "ok", index: 0 }),
-  makeTrack({ url: "https://youtube.com/watch?v=9fbZ02p", videoTitle: "Coastlines - Paper Lanterns [lyric video]", artist: "Coastlines", title: "Paper Lanterns", album: "2026 - Singles", year: 2026, durationSec: 198, fate: "ok", index: 1 }),
-  makeTrack({ url: "https://youtube.com/watch?v=k27Lmq3", videoTitle: "Tide Marks — Coastlines (visualizer)", artist: "Coastlines", title: "Tide Marks", album: "Saltwater EP", year: 2025, durationSec: 174, fate: "warn", index: 2 }),
-  makeTrack({ url: "https://youtube.com/watch?v=p0Wq8zz", videoTitle: "Coastlines – Slow Harbor", artist: "Coastlines", title: "Slow Harbor", album: "Saltwater EP", year: 2025, durationSec: 251, fate: "fail", index: 3 }),
-  makeTrack({ url: "https://youtube.com/watch?v=Lm5vv21", videoTitle: "Old Cassette (demo) - Coastlines", artist: "Coastlines", title: "Old Cassette", album: "Demos", year: 2024, durationSec: 143, fate: "skip", index: 4 }),
-];
 const DEFAULT_SETTINGS = {
   parallelJobs: 4,
   defaultFormat: "mp3",
@@ -899,8 +929,7 @@ const DEFAULT_SETTINGS = {
 };
 
 /* ===== utils/download.js ===== */
-// Real client-side file exports (CSV + logs). ZIP/library are mocked
-// as a manifest text file since there is no backend yet.
+// Real client-side file exports. Audio/ZIP export remains backend-only.
 
 function triggerDownload(filename, text, mime = "text/plain") {
   const blob = new Blob([text], { type: mime });
@@ -919,8 +948,22 @@ const csvField = (v) => {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 function exportCSV(tracks) {
-  const cols = ["Track", "Title", "Artist", "Album", "Year", "Genre", "Format", "Preset", "Size", "Status"];
-  const rows = tracks.map((t) => [t.track, t.title, t.artist, t.album, t.year, t.genre, t.format.toUpperCase(), t.preset, t.size, t.status]);
+  const cols = ["Track", "Title", "Artist", "Album", "Year", "Genre", "Source URL", "Format", "Preset", "Size", "Duration", "Status", "Prototype Note"];
+  const rows = tracks.map((t) => [
+    t.track,
+    t.title,
+    t.artist,
+    t.album,
+    t.year,
+    t.genre,
+    t.url,
+    t.format.toUpperCase(),
+    t.preset,
+    t.size,
+    t.duration,
+    t.status,
+    t.status === "queued" ? "Backend conversion is not connected in this build." : "",
+  ]);
   const csv = [cols, ...rows].map((r) => r.map(csvField).join(",")).join("\n");
   triggerDownload("ilisten-report.csv", csv, "text/csv");
 }
@@ -946,6 +989,27 @@ function exportLibraryManifest(tracks, pattern = "track-song") {
   });
   triggerDownload("ilisten-library-manifest.txt", lines.join("\n"));
 }
+function exportBackendManifest(tracks, pattern = "track-song") {
+  const lines = [
+    "iListen Backend Conversion Manifest",
+    "Backend conversion is not connected in this frontend build.",
+    `Queued imports: ${tracks.length}`,
+    "",
+  ];
+  if (!tracks.length) {
+    lines.push("No queued imports.");
+  } else {
+    tracks.forEach((track, index) => {
+      lines.push(`${index + 1}. ${track.title || `Imported link ${index + 1}`}`);
+      lines.push(`   Source URL: ${track.url || track.videoTitle || "Unknown source"}`);
+      lines.push(`   Status: ${track.status}`);
+      lines.push(`   Planned output: ${track.format.toUpperCase()} / ${track.preset}`);
+      lines.push(`   Planned filename: ${filenameFor(track, pattern)}`);
+      lines.push("");
+    });
+  }
+  triggerDownload("ilisten-backend-manifest.txt", lines.join("\n").trimEnd());
+}
 function filenameFor(t, pattern) {
   const ext = t.format === "aac" ? "m4a" : "mp3";
   const tn = String(t.track).padStart(2, "0");
@@ -964,39 +1028,19 @@ function ts() {
   return `[${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}]`;
 }
 
-function stageFor(p) {
-  if (p <= 0) return "queued";
-  if (p < 12) return "downloading";
-  if (p < 30) return "extracting";
-  if (p < 82) return "converting";
-  if (p < 92) return "metadata";
-  if (p < 100) return "artwork";
-  return "complete";
-}
-
-// Naive "parse" of a YouTube-style title into artist / song.
-function parseTitle(raw) {
-  let t = raw.replace(/\((official|lyric|audio|visualizer|video|demo)[^)]*\)/gi, "")
-             .replace(/\[[^\]]*\]/g, "").trim();
-  const parts = t.split(/\s+[-–—]\s+/);
-  if (parts.length >= 2) return { artist: parts[0].trim(), title: parts[1].trim() };
-  return { artist: "Unknown Artist", title: t || "Untitled" };
-}
 function useConverter() {
-  const [tracks, setTracks] = useState(SEED_TRACKS);
+  const [tracks, setTracks] = useState([]);
   const [logs, setLogs] = useState([
-    { t: ts(), kind: null, msg: "iListen ready · paste rights-cleared links to begin." },
+    { t: ts(), kind: null, msg: "iListen ready. Paste links to build a backend conversion queue." },
+    { t: ts(), kind: "warn", label: "Prototype:", msg: "Backend conversion is not connected in this build." },
   ]);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [globalCover, setGlobalCover] = useState(null);
 
   const tracksRef = useRef(tracks);
   const settingsRef = useRef(settings);
-  const processingRef = useRef(isProcessing);
   tracksRef.current = tracks;
   settingsRef.current = settings;
-  processingRef.current = isProcessing;
 
   const pushLog = useCallback((msg, kind = null, label = null) => {
     if (!settingsRef.current.generateLogs) return;
@@ -1010,92 +1054,18 @@ function useConverter() {
     return kbps;
   };
 
-  // ---- the simulation tick ----
-  useEffect(() => {
-    const iv = setInterval(() => {
-      if (!processingRef.current) return;
-      const cur = tracksRef.current;
-      const pending = [];
-
-      let inFlight = cur.filter((t) => IN_FLIGHT.includes(t.status)).length;
-      const limit = settingsRef.current.parallelJobs;
-
-      const next = cur.map((t) => {
-        if (TERMINAL.includes(t.status)) return t;
-
-        // promote queued -> downloading if there's a free slot
-        if (t.status === "queued") {
-          if (inFlight < limit) {
-            inFlight++;
-            pending.push(() => pushLog(`Downloading source — ${t.title}`));
-            return { ...t, status: "downloading", progress: 2 };
-          }
-          return t;
-        }
-
-        // skip fate: bail immediately on first touch
-        if (t._fate === "skip") {
-          pending.push(() => pushLog(`Skipped (already converted) — ${t.title}`, "warn", "Skipped:"));
-          return { ...t, status: "skipped", progress: 0 };
-        }
-
-        const inc = 4 + Math.random() * 8;
-        let progress = Math.min(100, t.progress + inc);
-
-        // fail fate: fail partway through converting
-        if (t._fate === "fail" && progress >= 58) {
-          pending.push(() => pushLog(`Source unavailable / blocked — ${t.title}`, "err", "Failed:"));
-          return { ...t, status: "failed", progress: t.progress, error: "Source unavailable in your region." };
-        }
-
-        const prevStage = t.status;
-        const stage = stageFor(progress);
-        let warning = t.warning;
-
-        if (stage !== prevStage) {
-          if (stage === "extracting") pending.push(() => pushLog(`Extracting audio — ${t.title}`));
-          if (stage === "converting") pending.push(() => pushLog(`Converting → ${t.format.toUpperCase()} — ${t.title}`));
-          if (stage === "metadata") pending.push(() => pushLog(`Embedding metadata (${settingsRef.current.tagVersion.toUpperCase().replace("ID3V", "ID3v")}) — ${t.title}`));
-          if (stage === "artwork") pending.push(() => pushLog(`Embedding artwork — ${t.title}`));
-          if (stage === "converting" && t._fate === "warn" && !t.warning) {
-            warning = "YouTube source is already lossy.";
-            pending.push(() => pushLog(`YouTube source is already lossy — ${t.title}`, "warn", "Warning:"));
-          }
-          if (stage === "complete") {
-            const fname = t.title;
-            pending.push(() => pushLog(`${fname}.${t.format === "aac" ? "m4a" : "mp3"}`, "ok", "Complete:"));
-          }
-        }
-
-        return { ...t, progress, status: stage, warning };
-      });
-
-      setTracks(next);
-      pending.forEach((fn) => fn());
-
-      // stop when nothing left to process
-      const stillGoing = next.some((t) => !TERMINAL.includes(t.status));
-      if (!stillGoing) {
-        processingRef.current = false;
-        setIsProcessing(false);
-        pushLog("All jobs finished.", "ok", "Done:");
-      }
-    }, 420);
-    return () => clearInterval(iv);
-  }, [pushLog]);
-
   // ---- actions ----
   const start = useCallback(() => {
-    const hasWork = tracksRef.current.some((t) => !TERMINAL.includes(t.status));
-    if (!hasWork) return;
-    const n = tracksRef.current.filter((t) => t.status === "queued").length;
-    pushLog(`Starting ${Math.min(settingsRef.current.parallelJobs, n || 1)} parallel jobs · preset varies by track`, null);
-    setIsProcessing(true);
+    if (!tracksRef.current.length) {
+      pushLog("No queued links yet. Add links before exporting a backend manifest.", null, "Prototype:");
+      return false;
+    }
+    pushLog("Backend conversion is not connected in this build. Export a backend manifest for a future worker instead.", "warn", "Prototype:");
+    return false;
   }, [pushLog]);
 
   const pause = useCallback(() => {
-    setIsProcessing(false);
-    pushLog("Paused.", null);
+    pushLog("No conversion job is running because no backend is connected.", null, "Prototype:");
   }, [pushLog]);
 
   const addFromLinks = useCallback((text) => {
@@ -1103,24 +1073,22 @@ function useConverter() {
     if (!urls.length) return 0;
     const existing = new Set(tracksRef.current.map((t) => t.url));
     const fresh = [];
-    urls.forEach((url, i) => {
+    urls.forEach((url) => {
       if (settingsRef.current.skipConverted && existing.has(url)) return;
-      const guess = parseTitle(url.includes("watch") ? `Imported Track ${tracksRef.current.length + i + 1}` : url);
+      existing.add(url);
+      const index = tracksRef.current.length + fresh.length;
       fresh.push(makeTrack({
         url,
         videoTitle: url,
-        artist: guess.artist,
-        title: guess.title,
-        album: "Imported",
-        year: new Date().getFullYear(),
-        durationSec: 150 + Math.floor(Math.random() * 140),
-        fate: "ok",
-        index: tracksRef.current.length + i,
+        title: `Imported link ${index + 1}`,
+        index,
       }));
     });
     if (fresh.length) {
       setTracks((prev) => [...prev, ...fresh]);
-      pushLog(`Added ${fresh.length} track${fresh.length > 1 ? "s" : ""} to the queue.`);
+      pushLog(`Added ${fresh.length} queued import${fresh.length > 1 ? "s" : ""}.`, null, "Queue:");
+      fresh.forEach((track) => pushLog(`${track.title}: ${track.url}`, null, "Added:"));
+      pushLog("Backend conversion is not connected in this build.", "warn", "Prototype:");
     }
     return fresh.length;
   }, [pushLog]);
@@ -1149,8 +1117,8 @@ function useConverter() {
   }, []);
 
   const retry = useCallback((id) => {
-    setTracks((prev) => prev.map((t) => (t.id === id ? { ...t, status: "queued", progress: 0, error: null, _fate: "ok" } : t)));
-    pushLog("Re-queued failed track.");
+    setTracks((prev) => prev.map((t) => (t.id === id ? { ...t, status: "queued", progress: 0, error: null, warning: null } : t)));
+    pushLog("Re-queued import. Backend conversion is still not connected.", null, "Queue:");
   }, [pushLog]);
 
   const clearCompleted = useCallback(() => {
@@ -1158,9 +1126,8 @@ function useConverter() {
   }, []);
 
   const resetAll = useCallback(() => {
-    setIsProcessing(false);
     setTracks((prev) => prev.map((t) => ({ ...t, status: "queued", progress: 0, error: null, warning: null })));
-    pushLog("Queue reset.");
+    pushLog("Queue reset. Backend conversion is not connected in this build.", null, "Queue:");
   }, [pushLog]);
 
   const applyGlobalCover = useCallback((dataUrl) => {
@@ -1174,7 +1141,7 @@ function useConverter() {
   }, []);
 
   return {
-    tracks, logs, settings, isProcessing, globalCover,
+    tracks, logs, settings, isProcessing: false, globalCover,
     actions: {
       start, pause, addFromLinks, updateTrack, applyToAll, removeTrack,
       retry, clearCompleted, resetAll, applyGlobalCover, updateSettings,
@@ -1200,13 +1167,13 @@ function TopBar({ tab, setTab, onOpenSettings, jobInfo }) {
   return (
     <header style={{
       display: "flex", alignItems: "center", gap: 16, padding: "0 20px", height: 56,
-      background: "var(--grad-graphite)", borderBottom: "1px solid #1c1c1e",
+      background: "var(--grad-graphite)", borderBottom: "1px solid var(--border-graphite)",
       boxShadow: "var(--gloss-top-dark)", color: "var(--text-on-dark)",
       position: "sticky", top: 0, zIndex: 20,
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
         <ClickWheelMark />
-        <span style={{ fontSize: 22, fontWeight: 600, letterSpacing: "-0.02em" }}>
+        <span style={{ fontFamily: "var(--font-deco)", fontSize: 20, fontWeight: "var(--weight-regular)", letterSpacing: "var(--tracking-wide)", lineHeight: 1 }}>
           <span style={{ color: "var(--ipod-lcd)" }}>i</span>Listen
         </span>
       </div>
@@ -1214,23 +1181,23 @@ function TopBar({ tab, setTab, onOpenSettings, jobInfo }) {
         {tabs.map((t) => (
           <button key={t} onClick={() => setTab(t)} style={{
             height: 32, padding: "0 16px", borderRadius: "var(--radius-sm)", cursor: "pointer",
-            fontSize: "var(--text-sm)", fontWeight: 500, fontFamily: "var(--font-ui)",
+            fontSize: "var(--text-sm)", fontWeight: "var(--weight-medium)", fontFamily: "var(--font-ui)",
             border: "1px solid " + (tab === t ? "var(--accent-primary-press)" : "transparent"),
             background: tab === t ? "var(--grad-select)" : "transparent",
-            color: tab === t ? "#fff" : "#c7c7cb",
+            color: tab === t ? "var(--text-on-accent)" : "var(--text-on-dark-soft)",
             boxShadow: tab === t ? "var(--gloss-top-dark)" : "none",
           }}>{t}</button>
         ))}
       </nav>
       <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 14 }}>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)", color: "#a9a9ad" }}>{jobInfo}</span>
+        <span style={{ fontFamily: "var(--font-typewriter)", fontSize: "var(--text-sm)", color: "var(--text-on-dark-muted)" }}>{jobInfo}</span>
         <button onClick={onOpenSettings} title="Settings" style={{
           display: "flex", alignItems: "center", gap: 7, height: 32, padding: "0 12px",
-          borderRadius: "var(--radius-sm)", cursor: "pointer", color: "#e6e6e8",
+          borderRadius: "var(--radius-sm)", cursor: "pointer", color: "var(--text-on-dark)",
           background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
           fontSize: "var(--text-sm)", fontFamily: "var(--font-ui)",
         }}>
-          <Icon name="prefs" size={15} color="#e6e6e8" emboss={false} />
+          <Icon name="prefs" size={15} color="var(--text-on-dark)" emboss={false} />
           Settings
         </button>
       </div>
@@ -1238,31 +1205,10 @@ function TopBar({ tab, setTab, onOpenSettings, jobInfo }) {
   );
 }
 
-/* ===== components/NoticeBar.jsx ===== */
-/** Legal / quality advisory strip — stated plainly, never buried. */
-function NoticeBar() {
-  return (
-    <div style={{
-      display: "flex", gap: 11, alignItems: "flex-start", padding: "11px 14px",
-      background: "var(--status-warning-soft)", border: "1px solid #E0CB8F",
-      borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-card)",
-    }}>
-      <span style={{ flex: "none", marginTop: 1 }}><Icon name="warn" size={18} color="#8A6A1E" /></span>
-      <p style={{ fontSize: "var(--text-sm)", color: "#6E561C", lineHeight: "var(--leading-snug)", margin: 0 }}>
-        This tool is intended only for content you own, created, licensed, or otherwise have rights to download and convert.
-        Do not use it to download copyrighted music you do not own or bypass DRM. YouTube audio is already compressed — for
-        best quality, use original WAV, FLAC, or AIFF masters when available.
-      </p>
-    </div>
-  );
-}
-
 /* ===== components/PastePanel.jsx ===== */
-/** Hero + paste links + rights gate + primary CTA. */
-function PastePanel({ agreed, setAgreed, isProcessing, onStart, onPause, onAdd }) {
-  const [links, setLinks] = React.useState(
-    "https://youtube.com/watch?v=aXr1k09\nhttps://youtube.com/watch?v=9fbZ02p"
-  );
+/** Hero + paste links + primary CTA. */
+function PastePanel({ onAdd }) {
+  const [links, setLinks] = React.useState("");
   const count = links.split("\n").filter((l) => l.trim()).length;
 
   const add = () => {
@@ -1273,14 +1219,14 @@ function PastePanel({ agreed, setAgreed, isProcessing, onStart, onPause, onAdd }
   return (
     <Card style={{ padding: 0, overflow: "hidden" }}>
       <div style={{ padding: "22px 24px 16px" }}>
-        <div style={{ fontFamily: "var(--font-deco)", fontSize: 12, letterSpacing: "0.3em", textTransform: "uppercase", color: "#9A6B3F", marginBottom: 10 }}>
+        <div style={{ fontFamily: "var(--font-deco)", fontSize: 12, letterSpacing: "var(--tracking-deco)", textTransform: "uppercase", color: "var(--accent-vintage)", marginBottom: 10 }}>
           iListen Hi&middot;Fi
         </div>
-        <h1 style={{ fontFamily: "var(--font-display)", fontSize: 31, lineHeight: 1.06, margin: "0 0 8px", color: "var(--text-primary)" }}>
-          Convert your own YouTube releases into iPod-ready music.
+        <h1 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h1)", fontWeight: "var(--weight-regular)", lineHeight: 1.06, margin: "0 0 8px", color: "var(--text-primary)" }}>
+          Queue YouTube links for an iPod conversion backend.
         </h1>
         <p style={{ fontSize: "var(--text-body-lg)", color: "var(--text-secondary)", margin: 0, maxWidth: 580, lineHeight: "var(--leading-normal)" }}>
-          Paste your rights-cleared video links, batch-convert to high-quality MP3 or AAC, add metadata and cover art, then export a clean offline library for iPod Classic.
+          This frontend prototype collects rights-cleared links, lets you plan metadata and output settings, and exports backend-ready reports. It does not download or convert audio yet.
         </p>
       </div>
 
@@ -1291,46 +1237,31 @@ function PastePanel({ agreed, setAgreed, isProcessing, onStart, onPause, onAdd }
           value={links}
           onChange={(e) => setLinks(e.target.value)}
           spellCheck={false}
-          placeholder="https://youtube.com/watch?v=…"
+          placeholder="https://youtube.com/watch?v=..."
           style={{
             width: "100%", boxSizing: "border-box", marginTop: 8, height: 84, resize: "vertical",
             padding: "10px 12px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-hairline)",
             background: "var(--surface-panel)", boxShadow: "var(--shadow-inset)",
-            fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)", color: "var(--text-primary)", outline: "none",
+            fontFamily: "var(--font-typewriter)", fontSize: "var(--text-sm)", color: "var(--text-primary)", outline: "none",
           }}
         />
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
           <Button variant="secondary" size="sm" iconLeft={<Icon name="paste" size={13} />} onClick={add} disabled={!count}>
-            Add to queue
+            Add queued imports
           </Button>
-          <span style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>
-            {count} link{count === 1 ? "" : "s"}
+          <span style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)", fontFamily: "var(--font-typewriter)" }}>
+            {count} link{count === 1 ? "" : "s"} ready to queue
           </span>
         </div>
       </div>
 
-      <div style={{ padding: "14px 24px", background: "var(--surface-recessed)", borderTop: "1px solid var(--border-soft)" }}>
-        <Checkbox
-          checked={agreed}
-          onChange={setAgreed}
-          label="I confirm I own these songs or have rights to download and convert them."
-        />
-      </div>
-
       <div style={{ padding: "14px 24px", display: "flex", gap: 12, alignItems: "center", borderTop: "1px solid var(--border-soft)" }}>
-        {isProcessing ? (
-          <Button variant="secondary" size="lg" onClick={onPause}>Pause</Button>
-        ) : (
-          <Button variant="primary" size="lg" disabled={!agreed} onClick={onStart} iconLeft={<Icon name="play" size={15} color="#fff" emboss={false} />}>
-            Start converting
-          </Button>
-        )}
-        <a href="#workflow" style={{ fontSize: "var(--text-body)", color: "var(--text-link)" }}>View workflow</a>
-        {!agreed && (
-          <span style={{ marginLeft: "auto", fontSize: "var(--text-sm)", color: "var(--status-warning)" }}>
-            Confirm your rights to enable
-          </span>
-        )}
+        <Button variant="primary" size="lg" disabled>
+          Backend conversion not connected
+        </Button>
+        <span style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)", fontFamily: "var(--font-typewriter)", lineHeight: 1.35 }}>
+          Export a backend manifest when you are ready to connect a worker.
+        </span>
       </div>
     </Card>
   );
@@ -1358,12 +1289,12 @@ function OutputControls({ preset, setPreset, format, setFormat, pattern, setPatt
                   width: 13, height: 13, borderRadius: "50%", flex: "none",
                   border: "1px solid " + (on ? "var(--accent-primary-press)" : "var(--border-strong)"),
                   background: on ? "var(--grad-primary)" : "var(--surface-panel)",
-                  boxShadow: on ? "inset 0 0 0 2px #fff" : "var(--shadow-inset)",
+                  boxShadow: on ? "inset 0 0 0 2px var(--text-on-accent)" : "var(--shadow-inset)",
                 }} />
-                <span style={{ fontSize: "var(--text-sm)", fontWeight: 600, color: "var(--text-primary)" }}>{p.name}</span>
+                <span style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-body)", fontWeight: "var(--weight-regular)", color: "var(--text-primary)", lineHeight: "var(--leading-tight)" }}>{p.name}</span>
               </div>
-              <div style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)", marginTop: 5, fontFamily: "var(--font-mono)" }}>{p.spec}</div>
-              {p.tag && <div style={{ fontSize: 10, fontWeight: 600, color: "var(--accent-primary-press)", marginTop: 4 }}>{p.tag}</div>}
+              <div style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)", marginTop: 5, fontFamily: "var(--font-typewriter)" }}>{p.spec}</div>
+              {p.tag && <div style={{ fontFamily: "var(--font-typewriter)", fontSize: 10, fontWeight: "var(--weight-regular)", color: "var(--accent-vintage)", marginTop: 4 }}>{p.tag}</div>}
             </button>
           );
         })}
@@ -1390,23 +1321,25 @@ function OutputControls({ preset, setPreset, format, setFormat, pattern, setPatt
 /* ===== components/ExportBar.jsx ===== */
 /** Export / download actions. */
 function ExportBar({ completeCount, totalCount, onZip, onLibrary, onCSV, onLogs, onSelected }) {
+  const backendDisabled = !totalCount;
+  const libraryDisabled = !completeCount;
   return (
     <Card style={{ padding: 16 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
-        <span style={{ fontWeight: 600, fontSize: "var(--text-body)" }}>Export</span>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", color: "var(--text-secondary)" }}>
-          {completeCount}/{totalCount} ready
+        <span style={{ fontFamily: "var(--font-display)", fontWeight: "var(--weight-regular)", fontSize: "var(--text-h3)", lineHeight: "var(--leading-tight)" }}>Export</span>
+        <span style={{ fontFamily: "var(--font-typewriter)", fontSize: "var(--text-xs)", color: "var(--text-secondary)" }}>
+          {totalCount} queued · {completeCount} converted
         </span>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <Button variant="primary" fullWidth disabled={!completeCount} iconLeft={<Icon name="zip" size={14} color="#fff" emboss={false} />} onClick={onZip}>
-          Download all as ZIP
+        <Button variant="primary" fullWidth disabled={backendDisabled} iconLeft={<Icon name="queue" size={14} color="var(--text-on-accent)" emboss={false} />} onClick={onZip}>
+          Export backend manifest
         </Button>
-        <Button variant="secondary" fullWidth disabled={!completeCount} iconLeft={<Icon name="get" size={14} />} onClick={onSelected}>
-          Download selected
+        <Button variant="secondary" fullWidth disabled={libraryDisabled} iconLeft={<Icon name="get" size={14} />} onClick={onSelected}>
+          Export completed manifest
         </Button>
-        <Button variant="secondary" fullWidth disabled={!completeCount} iconLeft={<Icon name="queue" size={14} />} onClick={onLibrary}>
-          Download organized library
+        <Button variant="secondary" fullWidth disabled={libraryDisabled} iconLeft={<Icon name="zip" size={14} />} onClick={onLibrary}>
+          Download library manifest
         </Button>
         <div style={{ display: "flex", gap: 8 }}>
           <Button variant="ghost" style={{ flex: 1 }} iconLeft={<Icon name="csv" size={14} />} onClick={onCSV}>CSV report</Button>
@@ -1438,7 +1371,7 @@ function QueueRow({ track, last, onEdit, onArt, onDownload, onRetry, onRemove })
   const inFlight = !["queued", "complete", "failed", "skipped"].includes(track.status);
 
   return (
-    <div style={{
+    <div className="il-queue-row" style={{
       display: "grid", gridTemplateColumns: "46px minmax(0,1fr) 168px 150px", gap: 14, alignItems: "center",
       padding: "12px 18px", borderBottom: last ? "none" : "1px solid var(--border-soft)",
       background: isDone ? "rgba(122,168,116,0.06)" : isFail ? "rgba(183,93,93,0.05)" : "transparent",
@@ -1447,16 +1380,16 @@ function QueueRow({ track, last, onEdit, onArt, onDownload, onRetry, onRemove })
 
       <div style={{ minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-          <span style={{ fontSize: "var(--text-body)", fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          <span style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-semibold)", color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {track.title}
           </span>
           {track.warning && <Icon name="warn" size={14} color="var(--status-warning)" />}
         </div>
-        <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        <div style={{ fontFamily: "var(--font-typewriter)", fontSize: "var(--text-sm)", color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {track.artist} · {track.format.toUpperCase()} · {track.size} · {track.duration}
         </div>
         {isFail && track.error && (
-          <div style={{ fontSize: "var(--text-xs)", color: "var(--status-error)", marginTop: 2 }}>{track.error}</div>
+          <div style={{ fontFamily: "var(--font-typewriter)", fontSize: "var(--text-xs)", color: "var(--status-error)", marginTop: 2 }}>{track.error}</div>
         )}
       </div>
 
@@ -1464,7 +1397,7 @@ function QueueRow({ track, last, onEdit, onArt, onDownload, onRetry, onRemove })
         {inFlight ? (
           <>
             <ProgressBar value={track.progress} showLabel />
-            <div style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)", marginTop: 4 }}>{st.label}</div>
+            <div style={{ fontFamily: "var(--font-typewriter)", fontSize: "var(--text-xs)", color: "var(--text-secondary)", marginTop: 4 }}>{st.label}</div>
           </>
         ) : (
           <Badge tone={st.tone}>{st.label}</Badge>
@@ -1488,7 +1421,7 @@ function QueueRow({ track, last, onEdit, onArt, onDownload, onRetry, onRemove })
             <Button size="sm" variant="ghost" onClick={() => onRemove(track)} title="Remove"><Icon name="trash" size={14} color="var(--text-secondary)" /></Button>
           </>
         )}
-        {inFlight && <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", color: "var(--text-secondary)" }}>working…</span>}
+        {inFlight && <span style={{ fontFamily: "var(--font-typewriter)", fontSize: "var(--text-xs)", color: "var(--text-secondary)" }}>working…</span>}
       </div>
     </div>
   );
@@ -1503,9 +1436,9 @@ function Queue({ tracks, onEdit, onArt, onDownload, onRetry, onRemove, onClear }
     <Card style={{ padding: 0, overflow: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "13px 18px", borderBottom: "1px solid var(--border-soft)", background: "var(--grad-chrome)" }}>
         <Icon name="queue" size={18} />
-        <span style={{ fontWeight: 600, fontSize: "var(--text-body)" }}>Batch processing queue</span>
+        <span style={{ fontFamily: "var(--font-display)", fontWeight: "var(--weight-regular)", fontSize: "var(--text-h3)", lineHeight: "var(--leading-tight)" }}>Backend import queue</span>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
+          <span style={{ fontFamily: "var(--font-typewriter)", fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
             {done} done{failed ? ` · ${failed} failed` : ""} · {tracks.length} total
           </span>
           <Button size="sm" variant="ghost" onClick={onClear} disabled={!done}>Clear done</Button>
@@ -1516,7 +1449,7 @@ function Queue({ tracks, onEdit, onArt, onDownload, onRetry, onRemove, onClear }
         <div style={{ padding: "40px 18px", textAlign: "center", color: "var(--text-secondary)" }}>
           <Icon name="note" size={28} color="var(--border-strong)" style={{ margin: "0 auto 10px" }} />
           <div style={{ fontSize: "var(--text-body)" }}>Your queue is empty.</div>
-          <div style={{ fontSize: "var(--text-sm)" }}>Paste links above and add them to the queue.</div>
+          <div style={{ fontSize: "var(--text-sm)" }}>Paste links above to prepare a backend conversion manifest.</div>
         </div>
       ) : (
         <div>
@@ -1546,20 +1479,20 @@ function LogsPanel({ lines }) {
   }, [lines]);
 
   const color = (kind) =>
-    kind === "ok" ? "#9FD49A" : kind === "warn" ? "#E2C172" : kind === "err" ? "#E59A9A" : "#D6E3EC";
+    kind === "ok" ? "var(--terminal-success)" : kind === "warn" ? "var(--terminal-warning)" : kind === "err" ? "var(--terminal-error)" : "var(--text-terminal)";
 
   return (
-    <div style={{ borderRadius: "var(--radius-md)", overflow: "hidden", border: "1px solid #1c1c1e", boxShadow: "var(--shadow-card)" }}>
+    <div style={{ borderRadius: "var(--radius-md)", overflow: "hidden", border: "1px solid var(--border-graphite)", boxShadow: "var(--shadow-card)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "var(--grad-graphite)", boxShadow: "var(--gloss-top-dark)" }}>
-        <Icon name="logs" size={16} color="#cfd6db" emboss={false} />
-        <span style={{ color: "#e6e9ec", fontSize: "var(--text-sm)", fontWeight: 600 }}>Logs</span>
-        <span style={{ marginLeft: "auto", color: "#8a929a", fontSize: "var(--text-xs)", fontFamily: "var(--font-mono)" }}>{lines.length} lines</span>
+        <Icon name="logs" size={16} color="var(--text-terminal)" emboss={false} />
+        <span style={{ color: "var(--text-terminal)", fontFamily: "var(--font-terminal)", fontSize: "var(--text-sm)", fontWeight: "var(--weight-semibold)" }}>Logs</span>
+        <span style={{ marginLeft: "auto", color: "var(--text-terminal-muted)", fontSize: "var(--text-xs)", fontFamily: "var(--font-terminal)" }}>{lines.length} lines</span>
       </div>
-      <div ref={ref} className="il-scroll" style={{ background: "var(--surface-graphite)", padding: "12px 14px", height: 170, overflow: "auto" }}>
+      <div ref={ref} className="il-scroll" style={{ background: "var(--surface-terminal)", padding: "12px 14px", height: 170, overflow: "auto" }}>
         {lines.map((l, i) => (
-          <div key={i} style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-mono)", lineHeight: 1.7, color: color(l.kind), wordBreak: "break-word" }}>
-            <span style={{ color: "#7E8B95" }}>{l.t}</span>{" "}
-            {l.label && <span style={{ fontWeight: 600 }}>{l.label} </span>}
+          <div key={i} style={{ fontFamily: "var(--font-terminal)", fontSize: "var(--text-mono)", lineHeight: 1.7, color: color(l.kind), wordBreak: "break-word" }}>
+            <span style={{ color: "var(--text-terminal-muted)" }}>{l.t}</span>{" "}
+            {l.label && <span style={{ fontWeight: "var(--weight-semibold)" }}>{l.label} </span>}
             {l.msg}
           </div>
         ))}
@@ -1571,37 +1504,37 @@ function LogsPanel({ lines }) {
 /* ===== components/IpodPreview.jsx ===== */
 /** Compact iPod Classic "Now Playing" preview with a working click wheel feel. */
 function IpodPreview({ track }) {
-  const now = track || { title: "Nothing playing", artist: "—", duration: "0:00", coverArt: null, thumbColor: "#2C2C2E" };
+  const now = track || { title: "Nothing playing", artist: "—", duration: "0:00", coverArt: null, thumbColor: "var(--ipod-graphite)" };
   return (
     <div style={{
       borderRadius: "var(--radius-ipod)", padding: 16, background: "var(--grad-chrome)",
       border: "1px solid var(--border-strong)", boxShadow: "var(--shadow-raised), var(--gloss-top)",
     }}>
       <div style={{
-        borderRadius: "var(--radius-sm)", background: "var(--grad-lcd)", border: "1px solid #9FB3C2",
+        borderRadius: "var(--radius-sm)", background: "var(--grad-lcd)", border: "1px solid var(--border-lcd)",
         boxShadow: "var(--shadow-inset)", padding: "10px 12px", marginBottom: 16,
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <span style={{ fontFamily: "var(--font-lcd)", fontSize: 17, lineHeight: 1, color: "var(--accent-primary-press)", letterSpacing: "0.04em", whiteSpace: "nowrap" }}>Now Playing</span>
-          <Icon name="play" size={12} color="#4F6373" emboss={false} />
+          <span style={{ fontFamily: "var(--font-lcd)", fontSize: 17, lineHeight: 1, color: "var(--text-lcd)", letterSpacing: "var(--tracking-lcd)", whiteSpace: "nowrap" }}>Now Playing</span>
+          <Icon name="play" size={12} color="var(--text-lcd-muted)" emboss={false} />
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <div style={{
-            width: 42, height: 42, flex: "none", borderRadius: 3, border: "1px solid #9FB3C2",
+            width: 42, height: 42, flex: "none", borderRadius: 3, border: "1px solid var(--border-lcd)",
             background: now.coverArt ? `center/cover no-repeat url(${now.coverArt})` : now.thumbColor,
             display: "flex", alignItems: "center", justifyContent: "center",
           }}>
             {!now.coverArt && <Icon name="note" size={16} color="rgba(255,255,255,0.9)" emboss={false} />}
           </div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, color: "#1E2A36", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{now.title}</div>
-            <div style={{ fontSize: "var(--text-xs)", color: "#4F6373", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{now.artist}</div>
+            <div style={{ fontSize: "var(--text-sm)", fontWeight: "var(--weight-bold)", color: "var(--text-lcd-strong)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{now.title}</div>
+            <div style={{ fontSize: "var(--text-xs)", color: "var(--text-lcd-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{now.artist}</div>
           </div>
         </div>
         <div style={{ height: 4, borderRadius: 2, background: "rgba(79,99,115,0.25)", margin: "10px 0 4px", overflow: "hidden" }}>
           <div style={{ width: "38%", height: "100%", background: "var(--accent-primary)" }} />
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-lcd)", fontSize: 15, color: "var(--accent-primary)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-lcd)", fontSize: 15, letterSpacing: "var(--tracking-lcd)", color: "var(--accent-primary)" }}>
           <span>1:24</span><span>-{now.duration}</span>
         </div>
       </div>
@@ -1613,10 +1546,10 @@ function IpodPreview({ track }) {
         boxShadow: "inset 0 2px 3px rgba(255,255,255,0.9), inset 0 -3px 5px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.18)",
         display: "flex", alignItems: "center", justifyContent: "center", position: "relative",
       }}>
-        <span style={{ position: "absolute", top: 11, fontSize: 8, fontWeight: 700, letterSpacing: "0.14em", color: "#7C7C78", textTransform: "uppercase" }}>Menu</span>
-        <span style={{ position: "absolute", bottom: 12, fontSize: 9, color: "#7C7C78" }}>&#9654;&#9646;&#9646;</span>
-        <span style={{ position: "absolute", left: 12, fontSize: 9, color: "#7C7C78" }}>&#9664;&#9664;</span>
-        <span style={{ position: "absolute", right: 11, fontSize: 9, color: "#7C7C78" }}>&#9654;&#9654;</span>
+        <span style={{ position: "absolute", top: 11, fontFamily: "var(--font-typewriter)", fontSize: 8, fontWeight: "var(--weight-regular)", letterSpacing: "var(--tracking-label)", color: "var(--text-chrome-muted)", textTransform: "uppercase" }}>Menu</span>
+        <span style={{ position: "absolute", bottom: 12, fontSize: 9, color: "var(--text-chrome-muted)" }}>&#9654;&#9646;&#9646;</span>
+        <span style={{ position: "absolute", left: 12, fontSize: 9, color: "var(--text-chrome-muted)" }}>&#9664;&#9664;</span>
+        <span style={{ position: "absolute", right: 11, fontSize: 9, color: "var(--text-chrome-muted)" }}>&#9654;&#9654;</span>
         <div style={{ width: 44, height: 44, borderRadius: "50%", background: "radial-gradient(circle at 50% 35%, #F3F3F1, #D2D2CD)", border: "1px solid #ADADA8", boxShadow: "inset 0 1px 2px rgba(255,255,255,0.9), inset 0 -2px 4px rgba(0,0,0,0.18)" }} />
       </div>
     </div>
@@ -1733,7 +1666,7 @@ function MetadataEditor({ open, track, onClose, onSave }) {
   if (!track || !draft) return null;
 
   const set = (key) => (e) => setDraft({ ...draft, [key]: e.target.value });
-  const genreOpts = GENRES.map((g) => ({ value: g, label: g }));
+  const genreOpts = [{ value: "", label: "Unspecified" }, ...GENRES.map((g) => ({ value: g, label: g }))];
 
   return (
     <Modal
@@ -1808,7 +1741,7 @@ function SettingsModal({ open, settings, onClose, onChange }) {
       width={580}
       footer={<Button variant="primary" onClick={onClose}>Done</Button>}
     >
-      <Row label="Parallel jobs" hint="How many tracks convert at once (1–8).">
+      <Row label="Future parallel jobs" hint="Planned worker concurrency once a backend is connected (1-8).">
         <div style={{ width: 220 }}>
           <Slider value={settings.parallelJobs} min={1} max={8} step={1} onChange={(v) => set({ parallelJobs: v })} />
         </div>
@@ -1828,7 +1761,7 @@ function SettingsModal({ open, settings, onClose, onChange }) {
       <Row label="Avoid overwrite" hint="Append a suffix instead of overwriting existing files.">
         <Switch checked={settings.avoidOverwrite} onChange={(v) => set({ avoidOverwrite: v })} />
       </Row>
-      <Row label="Generate logs" hint="Record each processing step in the logs panel.">
+      <Row label="Generate logs" hint="Record queue, export, and future backend events in the logs panel.">
         <Switch checked={settings.generateLogs} onChange={(v) => set({ generateLogs: v })} />
       </Row>
       <Row label="Resize artwork" hint="Downscale large covers to 800×800 before embedding.">
@@ -1876,8 +1809,8 @@ function CoverTile({ track }) {
       }}>
         {!track.coverArt && <Icon name="note" size={30} color="rgba(255,255,255,0.92)" emboss={false} />}
       </div>
-      <div style={{ marginTop: 8, fontSize: "var(--text-sm)", fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{track.title}</div>
-      <div style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{track.artist} · {track.format.toUpperCase()}</div>
+      <div style={{ marginTop: 8, fontSize: "var(--text-sm)", fontWeight: "var(--weight-semibold)", color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{track.title}</div>
+      <div style={{ fontFamily: "var(--font-typewriter)", fontSize: "var(--text-xs)", color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{track.artist} · {track.format.toUpperCase()}</div>
     </div>
   );
 }
@@ -1890,7 +1823,7 @@ function FolderTree({ tracks, pattern }) {
     byArtist[t.artist][t.album].push(t);
   });
   return (
-    <div style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)", color: "var(--text-secondary)", lineHeight: 1.7 }}>
+    <div style={{ fontFamily: "var(--font-typewriter)", fontSize: "var(--text-sm)", color: "var(--text-secondary)", lineHeight: 1.7 }}>
       <div style={{ color: "var(--text-primary)" }}>Music Library/</div>
       {Object.entries(byArtist).map(([artist, albums]) => (
         <div key={artist}>
@@ -1915,14 +1848,14 @@ function LibraryView({ tracks, pattern, onZip, onCSV }) {
       <Card style={{ padding: 0, overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "13px 18px", borderBottom: "1px solid var(--border-soft)", background: "var(--grad-chrome)" }}>
           <Icon name="note" size={18} />
-          <span style={{ fontWeight: 600 }}>Converted library</span>
-          <span style={{ marginLeft: "auto", fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>{done.length} tracks</span>
+          <span style={{ fontFamily: "var(--font-display)", fontWeight: "var(--weight-regular)", fontSize: "var(--text-h3)", lineHeight: "var(--leading-tight)" }}>Converted library</span>
+          <span style={{ marginLeft: "auto", fontFamily: "var(--font-typewriter)", fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>{done.length} tracks</span>
         </div>
         {done.length === 0 ? (
           <div style={{ padding: "48px 18px", textAlign: "center", color: "var(--text-secondary)" }}>
             <Icon name="note" size={30} color="var(--border-strong)" style={{ margin: "0 auto 10px" }} />
-            <div>No converted tracks yet.</div>
-            <div style={{ fontSize: "var(--text-sm)" }}>Convert some tracks to build your library.</div>
+            <div>No backend-completed tracks yet.</div>
+            <div style={{ fontSize: "var(--text-sm)" }}>Connect a backend worker before this library can contain audio outputs.</div>
           </div>
         ) : (
           <div style={{ padding: 18, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(128px, 1fr))", gap: 16 }}>
@@ -1934,11 +1867,11 @@ function LibraryView({ tracks, pattern, onZip, onCSV }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <Card>
           <div className="il-label" style={{ marginBottom: 10 }}>Folder structure</div>
-          {done.length ? <FolderTree tracks={done} pattern={pattern} /> : <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>Nothing converted yet.</div>}
+          {done.length ? <FolderTree tracks={done} pattern={pattern} /> : <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>No backend-completed files yet.</div>}
         </Card>
         <Card>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <Button variant="primary" fullWidth disabled={!done.length} iconLeft={<Icon name="zip" size={14} color="#fff" emboss={false} />} onClick={onZip}>Download organized library</Button>
+            <Button variant="primary" fullWidth disabled={!done.length} iconLeft={<Icon name="zip" size={14} color="var(--text-on-accent)" emboss={false} />} onClick={onZip}>Download library manifest</Button>
             <Button variant="ghost" fullWidth iconLeft={<Icon name="csv" size={14} />} onClick={onCSV} disabled={!done.length}>Export CSV report</Button>
           </div>
         </Card>
@@ -1954,7 +1887,7 @@ function Toast({ msg }) {
     <div className="il-fade-in" style={{
       position: "fixed", bottom: 22, left: "50%", transform: "translateX(-50%)", zIndex: 200,
       background: "var(--grad-graphite)", color: "var(--text-on-dark)", padding: "10px 18px",
-      borderRadius: "var(--radius-pill)", border: "1px solid #1c1c1e",
+      borderRadius: "var(--radius-pill)", border: "1px solid var(--border-graphite)",
       boxShadow: "var(--shadow-float), var(--gloss-top-dark)", fontSize: "var(--text-sm)",
     }}>
       {msg}
@@ -1963,9 +1896,8 @@ function Toast({ msg }) {
 }
 
 function App() {
-  const { tracks, logs, settings, isProcessing, globalCover, actions } = useConverter();
+  const { tracks, logs, settings, globalCover, actions } = useConverter();
   const [tab, setTab] = React.useState("Convert");
-  const [agreed, setAgreed] = React.useState(false);
   const [preset, setPreset] = React.useState("balanced");
   const [format, setFormat] = React.useState("mp3");
 
@@ -1982,16 +1914,16 @@ function App() {
   };
 
   const completed = tracks.filter((t) => t.status === "complete");
-  const nowPlaying = completed[completed.length - 1] || tracks.find((t) => !TERMINAL.includes(t.status)) || tracks[0];
+  const nowPlaying = completed[completed.length - 1] || null;
   const pattern = settings.filenamePattern;
 
   // ---- export handlers ----
-  const onZip = () => { exportLibraryManifest(tracks, pattern); actions.pushLog("Packaged library as ZIP (mock manifest).", "ok", "Export:"); showToast("Downloaded library manifest (.txt) — ZIP is mocked in this build."); };
-  const onLibrary = () => { exportLibraryManifest(tracks, pattern); showToast("Downloaded organized-library manifest."); };
-  const onSelected = () => { exportLibraryManifest(completed, pattern); showToast(`${completed.length} track(s) — manifest downloaded (mock).`); };
+  const onZip = () => { exportBackendManifest(tracks, pattern); actions.pushLog("Exported backend conversion manifest. Backend conversion is not connected in this build.", null, "Export:"); showToast("Downloaded backend manifest. Conversion still needs a backend worker."); };
+  const onLibrary = () => { exportLibraryManifest(completed, pattern); showToast("Downloaded organized-library manifest for backend-completed tracks."); };
+  const onSelected = () => { exportLibraryManifest(completed, pattern); showToast(`${completed.length} completed track(s) included in manifest.`); };
   const onCSV = () => { exportCSV(tracks); actions.pushLog("Exported CSV report.", null, "Export:"); showToast("CSV report downloaded."); };
   const onLogs = () => { exportLogs(logs); showToast("Logs exported."); };
-  const onDownloadOne = (t) => showToast(`"${filenameFor(t, pattern)}" would download here (mock build).`);
+  const onDownloadOne = (t) => showToast(`"${filenameFor(t, pattern)}" is a planned filename only. Audio export needs a backend.`);
 
   const applyArt = (art) => {
     if (artTarget === "all") actions.applyGlobalCover(art);
@@ -1999,7 +1931,7 @@ function App() {
     setArtTarget(null);
   };
 
-  const jobInfo = `${settings.parallelJobs} jobs · ${format.toUpperCase()}`;
+  const jobInfo = `${tracks.length} queued · backend offline · ${format.toUpperCase()}`;
 
   return (
     <div className="il-desktop">
@@ -2009,14 +1941,8 @@ function App() {
         {tab === "Convert" ? (
           <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 320px", gap: 20, alignItems: "start" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 18, minWidth: 0 }}>
-              <NoticeBar />
               <PastePanel
-                agreed={agreed}
-                setAgreed={setAgreed}
-                isProcessing={isProcessing}
-                onStart={actions.start}
-                onPause={actions.pause}
-                onAdd={(text) => { const n = actions.addFromLinks(text); if (n) showToast(`Added ${n} track(s).`); else showToast("No new links to add."); return n; }}
+                onAdd={(text) => { const n = actions.addFromLinks(text); if (n) showToast(`Added ${n} queued import(s). Backend conversion is not connected.`); else showToast("No new links to add."); return n; }}
               />
               <div id="queue">
                 <Queue
@@ -2049,14 +1975,14 @@ function App() {
                 setFormat={(f) => { setFormat(f); }}
                 pattern={pattern}
                 setPattern={(p) => actions.updateSettings({ filenamePattern: p })}
-                onApplyAll={() => { actions.applyToAll({ preset, format }); showToast("Applied preset & format to all tracks."); }}
+                onApplyAll={() => { actions.applyToAll({ preset, format }); showToast("Applied planned preset & format to queued imports."); }}
               />
               <button
                 onClick={() => setArtTarget("all")}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 8, height: 36,
                   borderRadius: "var(--radius-sm)", cursor: "pointer", fontFamily: "var(--font-ui)",
-                  fontSize: "var(--text-sm)", fontWeight: 500, color: "var(--text-primary)",
+                  fontSize: "var(--text-sm)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)",
                   background: "var(--grad-chrome)", border: "1px solid var(--border-strong)", boxShadow: "var(--shadow-card), var(--gloss-top)",
                 }}
               >

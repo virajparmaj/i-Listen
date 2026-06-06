@@ -1,230 +1,314 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
-  SEED_TRACKS, DEFAULT_SETTINGS, PRESETS, STATUS, TERMINAL, IN_FLIGHT,
-  makeTrack, estimateSize,
+  DEFAULT_SETTINGS,
+  IN_FLIGHT,
+  makeTrack,
+  applyOutputFields,
+  outputFor,
+  presetFor,
 } from "../data/mockData.js";
+import {
+  addJobs,
+  cancelJob,
+  connectEvents,
+  createPlaylist,
+  helperBaseUrl,
+  helperHealth,
+  helperSetupCommand,
+  openProject,
+  pairHelper,
+  removeJob,
+  retryJob,
+  startJob,
+  updateJob,
+} from "../utils/localHelper.js";
 
 function ts() {
   const d = new Date();
   return `[${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}]`;
 }
 
-function stageFor(p) {
-  if (p <= 0) return "queued";
-  if (p < 12) return "downloading";
-  if (p < 30) return "extracting";
-  if (p < 82) return "converting";
-  if (p < 92) return "metadata";
-  if (p < 100) return "artwork";
-  return "complete";
+function fmtDuration(sec) {
+  if (!Number.isFinite(sec) || sec <= 0) return "Pending";
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-// Naive "parse" of a YouTube-style title into artist / song.
-function parseTitle(raw) {
-  let t = raw.replace(/\((official|lyric|audio|visualizer|video|demo)[^)]*\)/gi, "")
-             .replace(/\[[^\]]*\]/g, "").trim();
-  const parts = t.split(/\s+[-–—]\s+/);
-  if (parts.length >= 2) return { artist: parts[0].trim(), title: parts[1].trim() };
-  return { artist: "Unknown Artist", title: t || "Untitled" };
+function fmtSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "After conversion";
+  const mb = bytes / 1024 / 1024;
+  return `${mb.toFixed(1)} MB`;
+}
+
+function mapJob(job, index = 0) {
+  const output = outputFor(job.outputOption);
+  return {
+    id: job.id,
+    url: job.url,
+    videoTitle: job.url,
+    thumbColor: ["#3E6F9E", "#7AA874", "#C89B3C", "#8FB7D9", "#2C2C2E", "#B75D5D", "#5B8CBE"][index % 7],
+    title: job.title,
+    artist: job.artist,
+    album: job.album,
+    albumArtist: job.albumArtist,
+    year: job.year,
+    genre: job.genre,
+    track: job.track,
+    composer: job.composer,
+    producer: "",
+    comment: job.comment,
+    playlists: job.playlists || [],
+    playlistText: (job.playlists || []).join(", "),
+    versionLabel: "",
+    durationSec: job.durationSec,
+    duration: fmtDuration(job.durationSec),
+    preset: output.value === "best-youtube" ? "best" : output.value === "alac" ? "alac" : output.value === "mp3-v0" ? "mp3" : "apple",
+    outputOption: output.value,
+    format: output.format,
+    ext: output.ext,
+    encoder: output.encoder,
+    qualityLabel: job.selectedOutput || output.shortLabel,
+    compatibility: output.compatibility,
+    size: fmtSize(job.sizeBytes),
+    outputPath: job.outputPath,
+    sourcePath: job.sourcePath,
+    sourceCodec: job.sourceCodec,
+    coverArt: null,
+    progress: job.progress,
+    status: job.status,
+    warning: job.warning || null,
+    error: job.error || null,
+  };
+}
+
+function mapJobs(jobs = []) {
+  return jobs.map(mapJob);
 }
 
 export function useConverter() {
-  const [tracks, setTracks] = useState(SEED_TRACKS);
+  const [tracks, setTracks] = useState([]);
   const [logs, setLogs] = useState([
-    { t: ts(), kind: null, msg: "iListen ready · paste rights-cleared links to begin." },
+    { t: ts(), kind: null, msg: "iListen ready. Start the local helper, then paste YouTube links." },
   ]);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [globalCover, setGlobalCover] = useState(null);
+  const [helper, setHelper] = useState({
+    checked: false,
+    connected: false,
+    pairing: false,
+    error: null,
+    project: null,
+    tools: null,
+    helperUrl: helperBaseUrl,
+    setupCommand: helperSetupCommand(),
+  });
 
   const tracksRef = useRef(tracks);
   const settingsRef = useRef(settings);
-  const processingRef = useRef(isProcessing);
+  const helperRef = useRef(helper);
   tracksRef.current = tracks;
   settingsRef.current = settings;
-  processingRef.current = isProcessing;
+  helperRef.current = helper;
 
   const pushLog = useCallback((msg, kind = null, label = null) => {
     if (!settingsRef.current.generateLogs) return;
     setLogs((prev) => [...prev, { t: ts(), kind, label, msg }]);
   }, []);
 
-  const presetKbps = (preset, format) => {
-    const p = PRESETS.find((x) => x.id === preset);
-    let kbps = p ? p.kbps : 245;
-    if (format === "aac" && preset !== "archive") kbps = 256;
-    return kbps;
-  };
+  const applyPayload = useCallback((payload) => {
+    if (payload.jobs) setTracks(mapJobs(payload.jobs));
+    if (payload.logs) setLogs(payload.logs.map((l) => ({ ...l, t: l.t.startsWith("[") ? l.t : `[${l.t}]` })));
+    if (payload.project || payload.tools) {
+      setHelper((prev) => ({
+        ...prev,
+        checked: true,
+        connected: true,
+        error: null,
+        project: payload.project || prev.project,
+        tools: payload.tools || prev.tools,
+      }));
+    }
+  }, []);
 
-  // ---- the simulation tick ----
   useEffect(() => {
-    const iv = setInterval(() => {
-      if (!processingRef.current) return;
-      const cur = tracksRef.current;
-      const pending = [];
+    let disposed = false;
+    let events = null;
 
-      let inFlight = cur.filter((t) => IN_FLIGHT.includes(t.status)).length;
-      const limit = settingsRef.current.parallelJobs;
-
-      const next = cur.map((t) => {
-        if (TERMINAL.includes(t.status)) return t;
-
-        // promote queued -> downloading if there's a free slot
-        if (t.status === "queued") {
-          if (inFlight < limit) {
-            inFlight++;
-            pending.push(() => pushLog(`Downloading source — ${t.title}`));
-            return { ...t, status: "downloading", progress: 2 };
+    async function connect() {
+      try {
+        setHelper((prev) => ({ ...prev, pairing: true, error: null }));
+        await helperHealth();
+        const paired = await pairHelper();
+        const projectState = await openProject();
+        if (disposed) return;
+        applyPayload(projectState);
+        setHelper((prev) => ({
+          ...prev,
+          checked: true,
+          connected: true,
+          pairing: false,
+          helperUrl: paired.helperUrl || helperBaseUrl,
+        }));
+        pushLog("Local helper connected.", "ok", "Helper:");
+        events = connectEvents((payload) => {
+          if (disposed) return;
+          applyPayload(payload);
+          if (payload.log) setLogs((prev) => [...prev, { ...payload.log, t: `[${payload.log.t}]` }]);
+        }, () => {
+          if (!disposed) {
+            setHelper((prev) => ({ ...prev, connected: false, error: "Lost connection to the local helper." }));
           }
-          return t;
-        }
-
-        // skip fate: bail immediately on first touch
-        if (t._fate === "skip") {
-          pending.push(() => pushLog(`Skipped (already converted) — ${t.title}`, "warn", "Skipped:"));
-          return { ...t, status: "skipped", progress: 0 };
-        }
-
-        const inc = 4 + Math.random() * 8;
-        let progress = Math.min(100, t.progress + inc);
-
-        // fail fate: fail partway through converting
-        if (t._fate === "fail" && progress >= 58) {
-          pending.push(() => pushLog(`Source unavailable / blocked — ${t.title}`, "err", "Failed:"));
-          return { ...t, status: "failed", progress: t.progress, error: "Source unavailable in your region." };
-        }
-
-        const prevStage = t.status;
-        const stage = stageFor(progress);
-        let warning = t.warning;
-
-        if (stage !== prevStage) {
-          if (stage === "extracting") pending.push(() => pushLog(`Extracting audio — ${t.title}`));
-          if (stage === "converting") pending.push(() => pushLog(`Converting → ${t.format.toUpperCase()} — ${t.title}`));
-          if (stage === "metadata") pending.push(() => pushLog(`Embedding metadata (${settingsRef.current.tagVersion.toUpperCase().replace("ID3V", "ID3v")}) — ${t.title}`));
-          if (stage === "artwork") pending.push(() => pushLog(`Embedding artwork — ${t.title}`));
-          if (stage === "converting" && t._fate === "warn" && !t.warning) {
-            warning = "YouTube source is already lossy.";
-            pending.push(() => pushLog(`YouTube source is already lossy — ${t.title}`, "warn", "Warning:"));
-          }
-          if (stage === "complete") {
-            const fname = t.title;
-            pending.push(() => pushLog(`${fname}.${t.format === "aac" ? "m4a" : "mp3"}`, "ok", "Complete:"));
-          }
-        }
-
-        return { ...t, progress, status: stage, warning };
-      });
-
-      setTracks(next);
-      pending.forEach((fn) => fn());
-
-      // stop when nothing left to process
-      const stillGoing = next.some((t) => !TERMINAL.includes(t.status));
-      if (!stillGoing) {
-        processingRef.current = false;
-        setIsProcessing(false);
-        pushLog("All jobs finished.", "ok", "Done:");
+        });
+      } catch (error) {
+        if (disposed) return;
+        setHelper((prev) => ({
+          ...prev,
+          checked: true,
+          pairing: false,
+          connected: false,
+          error: error.message,
+        }));
+        pushLog(`Local helper not connected. Run ${helperSetupCommand()} and reload.`, "warn", "Helper:");
       }
-    }, 420);
-    return () => clearInterval(iv);
-  }, [pushLog]);
+    }
 
-  // ---- actions ----
-  const start = useCallback(() => {
-    const hasWork = tracksRef.current.some((t) => !TERMINAL.includes(t.status));
-    if (!hasWork) return;
-    const n = tracksRef.current.filter((t) => t.status === "queued").length;
-    pushLog(`Starting ${Math.min(settingsRef.current.parallelJobs, n || 1)} parallel jobs · preset varies by track`, null);
-    setIsProcessing(true);
-  }, [pushLog]);
+    connect();
+    return () => {
+      disposed = true;
+      events?.close();
+    };
+  }, [applyPayload, pushLog]);
 
-  const pause = useCallback(() => {
-    setIsProcessing(false);
-    pushLog("Paused.", null);
-  }, [pushLog]);
+  const refreshFromResult = useCallback((result) => {
+    applyPayload(result);
+    return result;
+  }, [applyPayload]);
 
-  const addFromLinks = useCallback((text) => {
-    const urls = text.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  const start = useCallback(async () => {
+    if (!helperRef.current.connected) {
+      pushLog("Local helper is not connected. Conversion cannot start.", "warn", "Helper:");
+      return false;
+    }
+
+    const queued = tracksRef.current.filter((track) => ["queued", "failed", "canceled"].includes(track.status));
+    if (!queued.length) {
+      pushLog("No queued YouTube links to convert.", null, "Queue:");
+      return false;
+    }
+
+    pushLog(`Starting ${queued.length} conversion job${queued.length === 1 ? "" : "s"}.`, null, "Convert:");
+    await Promise.all(queued.map((track) => startJob(track.id).then(refreshFromResult)));
+    return true;
+  }, [pushLog, refreshFromResult]);
+
+  const pause = useCallback(async (id = null) => {
+    const active = tracksRef.current.filter((track) => IN_FLIGHT.includes(track.status) && (!id || track.id === id));
+    await Promise.all(active.map((track) => cancelJob(track.id).then(refreshFromResult)));
+    pushLog(active.length ? `Canceled ${active.length} active job${active.length === 1 ? "" : "s"}.` : "No active conversion job is running.", null, "Cancel:");
+  }, [pushLog, refreshFromResult]);
+
+  const addFromLinks = useCallback(async (text) => {
+    const urls = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
     if (!urls.length) return 0;
-    const existing = new Set(tracksRef.current.map((t) => t.url));
-    const fresh = [];
-    urls.forEach((url, i) => {
-      if (settingsRef.current.skipConverted && existing.has(url)) return;
-      const guess = parseTitle(url.includes("watch") ? `Imported Track ${tracksRef.current.length + i + 1}` : url);
-      fresh.push(makeTrack({
+
+    if (!helperRef.current.connected) {
+      const fresh = urls.map((url, index) => applyOutputFields(makeTrack({
         url,
         videoTitle: url,
-        artist: guess.artist,
-        title: guess.title,
-        album: "Imported",
-        year: new Date().getFullYear(),
-        durationSec: 150 + Math.floor(Math.random() * 140),
-        fate: "ok",
-        index: tracksRef.current.length + i,
-      }));
-    });
-    if (fresh.length) {
+        title: `Offline YouTube link ${tracksRef.current.length + index + 1}`,
+        index: tracksRef.current.length + index,
+      }), settingsRef.current.defaultOutput));
       setTracks((prev) => [...prev, ...fresh]);
-      pushLog(`Added ${fresh.length} track${fresh.length > 1 ? "s" : ""} to the queue.`);
+      pushLog("Queued locally, but conversion needs the local helper.", "warn", "Helper:");
+      return fresh.length;
     }
-    return fresh.length;
-  }, [pushLog]);
 
-  const updateTrack = useCallback((id, patch) => {
-    setTracks((prev) => prev.map((t) => {
-      if (t.id !== id) return t;
-      const merged = { ...t, ...patch };
-      if (patch.format || patch.preset) {
-        merged.size = estimateSize(merged.durationSec, presetKbps(merged.preset, merged.format));
+    const result = await addJobs(text, settingsRef.current.defaultOutput);
+    refreshFromResult(result);
+    if (result.rejected?.length) {
+      pushLog(`${result.rejected.length} non-YouTube link${result.rejected.length === 1 ? "" : "s"} rejected.`, "warn", "Queue:");
+    }
+    return result.created?.length || 0;
+  }, [pushLog, refreshFromResult]);
+
+  const updateTrack = useCallback(async (id, patch) => {
+    setTracks((prev) => prev.map((track) => (track.id === id ? { ...track, ...patch } : track)));
+    if (!helperRef.current.connected) return;
+    let nextPatch = { ...patch };
+    if (patch.preset && !patch.outputOption) {
+      nextPatch.outputOption = presetFor(patch.preset).outputOption;
+    }
+    const result = await updateJob(id, nextPatch);
+    refreshFromResult(result);
+  }, [refreshFromResult]);
+
+  const applyToAll = useCallback(async (patch) => {
+    setTracks((prev) => prev.map((track) => {
+      let merged = { ...track, ...patch };
+      if (patch.preset && !patch.outputOption) {
+        merged = { ...merged, outputOption: presetFor(patch.preset).outputOption };
       }
-      return merged;
+      return applyOutputFields(merged, merged.outputOption);
     }));
-  }, []);
+    if (!helperRef.current.connected) return;
+    const nextPatch = { ...patch };
+    if (patch.preset && !patch.outputOption) nextPatch.outputOption = presetFor(patch.preset).outputOption;
+    await Promise.all(tracksRef.current.map((track) => updateJob(track.id, nextPatch).then(refreshFromResult)));
+  }, [refreshFromResult]);
 
-  const applyToAll = useCallback((patch) => {
-    setTracks((prev) => prev.map((t) => {
-      const merged = { ...t, ...patch };
-      merged.size = estimateSize(merged.durationSec, presetKbps(merged.preset, merged.format));
-      return merged;
-    }));
-  }, []);
+  const removeTrack = useCallback(async (id) => {
+    setTracks((prev) => prev.filter((track) => track.id !== id));
+    if (helperRef.current.connected) await removeJob(id).then(refreshFromResult);
+  }, [refreshFromResult]);
 
-  const removeTrack = useCallback((id) => {
-    setTracks((prev) => prev.filter((t) => t.id !== id));
-  }, []);
+  const retry = useCallback(async (id) => {
+    setTracks((prev) => prev.map((track) => (track.id === id ? { ...track, status: "queued", progress: 0, error: null, warning: null } : track)));
+    if (helperRef.current.connected) await retryJob(id).then(refreshFromResult);
+    pushLog("Re-queued conversion job.", null, "Queue:");
+  }, [pushLog, refreshFromResult]);
 
-  const retry = useCallback((id) => {
-    setTracks((prev) => prev.map((t) => (t.id === id ? { ...t, status: "queued", progress: 0, error: null, _fate: "ok" } : t)));
-    pushLog("Re-queued failed track.");
-  }, [pushLog]);
-
-  const clearCompleted = useCallback(() => {
-    setTracks((prev) => prev.filter((t) => !["complete", "skipped"].includes(t.status)));
-  }, []);
+  const clearCompleted = useCallback(async () => {
+    const done = tracksRef.current.filter((track) => ["complete", "skipped", "canceled"].includes(track.status));
+    setTracks((prev) => prev.filter((track) => !["complete", "skipped", "canceled"].includes(track.status)));
+    if (helperRef.current.connected) {
+      await Promise.all(done.map((track) => removeJob(track.id).then(refreshFromResult)));
+    }
+  }, [refreshFromResult]);
 
   const resetAll = useCallback(() => {
-    setIsProcessing(false);
-    setTracks((prev) => prev.map((t) => ({ ...t, status: "queued", progress: 0, error: null, warning: null })));
-    pushLog("Queue reset.");
+    setTracks((prev) => prev.map((track) => ({ ...track, status: "queued", progress: 0, error: null, warning: null })));
+    pushLog("Queue reset.", null, "Queue:");
   }, [pushLog]);
 
   const applyGlobalCover = useCallback((dataUrl) => {
     setGlobalCover(dataUrl);
-    setTracks((prev) => prev.map((t) => ({ ...t, coverArt: dataUrl })));
-    pushLog("Applied cover art to all tracks.");
+    setTracks((prev) => prev.map((track) => ({ ...track, coverArt: dataUrl })));
+    pushLog("Applied cover art in the UI. The local helper uses YouTube thumbnails for embedded artwork in v1.", "warn", "Artwork:");
   }, [pushLog]);
 
   const updateSettings = useCallback((patch) => {
     setSettings((prev) => ({ ...prev, ...patch }));
   }, []);
 
+  const exportPlaylist = useCallback(async () => {
+    if (!helperRef.current.connected) throw new Error("Local helper is not connected.");
+    const result = await createPlaylist();
+    refreshFromResult(result);
+    return result.playlist;
+  }, [refreshFromResult]);
+
   return {
-    tracks, logs, settings, isProcessing, globalCover,
+    tracks,
+    logs,
+    settings,
+    isProcessing: tracks.some((track) => IN_FLIGHT.includes(track.status)),
+    globalCover,
+    helper,
     actions: {
       start, pause, addFromLinks, updateTrack, applyToAll, removeTrack,
       retry, clearCompleted, resetAll, applyGlobalCover, updateSettings,
-      setGlobalCover, pushLog,
+      setGlobalCover, pushLog, exportPlaylist,
     },
   };
 }

@@ -32,11 +32,15 @@ function processImage(file, { resize, toJpeg }) {
 }
 
 /** Drag-and-drop cover-art uploader with resize + PNG→JPEG options. */
-export function CoverArtUploader({ value, onChange, compact = false }) {
+export function CoverArtUploader({ value, onChange, compact = false, defaultResize = true }) {
   const [drag, setDrag] = React.useState(false);
-  const [resize, setResize] = React.useState(true);
+  const [resize, setResize] = React.useState(defaultResize);
   const [toJpeg, setToJpeg] = React.useState(true);
   const inputRef = React.useRef(null);
+
+  React.useEffect(() => {
+    setResize(defaultResize);
+  }, [defaultResize]);
 
   const handleFiles = async (files) => {
     const file = [...files].find((f) => f.type.startsWith("image/"));
@@ -47,19 +51,23 @@ export function CoverArtUploader({ value, onChange, compact = false }) {
 
   return (
     <div>
-      <div
+      <button
+        type="button"
         onClick={() => inputRef.current?.click()}
         onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
         onDragLeave={() => setDrag(false)}
         onDrop={(e) => { e.preventDefault(); setDrag(false); handleFiles(e.dataTransfer.files); }}
+        aria-label={value ? "Replace cover art" : "Upload cover art"}
         style={{
           display: "flex", flexDirection: compact ? "row" : "column", alignItems: "center", justifyContent: "center",
           gap: 12, cursor: "pointer", textAlign: "center",
+          width: "100%",
           padding: compact ? 12 : 20,
           minHeight: compact ? 0 : 150,
           borderRadius: "var(--radius-md)",
           border: `1.5px dashed ${drag ? "var(--accent-primary)" : "var(--border-strong)"}`,
           background: drag ? "var(--surface-lcd)" : "var(--surface-recessed)",
+          fontFamily: "var(--font-ui)",
           transition: "border-color 120ms ease, background 120ms ease",
         }}
       >
@@ -79,8 +87,8 @@ export function CoverArtUploader({ value, onChange, compact = false }) {
             JPEG/PNG · square 600×600–1000×1000 px
           </div>
         </div>
-        <input ref={inputRef} type="file" accept="image/*" hidden onChange={(e) => handleFiles(e.target.files)} />
-      </div>
+      </button>
+      <input ref={inputRef} type="file" accept="image/*" hidden onChange={(e) => handleFiles(e.target.files)} aria-label="Choose cover art file" />
 
       {!compact && (
         <div style={{ display: "flex", gap: 18, marginTop: 12, flexWrap: "wrap" }}>

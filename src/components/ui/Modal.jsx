@@ -1,13 +1,21 @@
 import React from "react";
-import { Icon } from "./Icon.jsx";
 
 /** Classic-OS modal window: pinstripe-dimmed backdrop, title bar with traffic lights. */
 export function Modal({ open, onClose, title = "", width = 560, children, footer = null }) {
+  const dialogRef = React.useRef(null);
+  const titleId = React.useId();
   React.useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose && onClose();
     if (open) window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
+
+  React.useEffect(() => {
+    if (!open) return undefined;
+    const previous = document.activeElement;
+    dialogRef.current?.focus();
+    return () => previous?.focus?.();
+  }, [open]);
 
   if (!open) return null;
   return (
@@ -25,6 +33,11 @@ export function Modal({ open, onClose, title = "", width = 560, children, footer
       }}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
         className="il-fade-in"
         style={{
           width,
@@ -59,7 +72,7 @@ export function Modal({ open, onClose, title = "", width = 560, children, footer
           />
           <span style={{ width: 13, height: 13, borderRadius: "50%", border: "1px solid rgba(0,0,0,0.28)", background: "radial-gradient(circle at 35% 30%, #FFE08A, #D9A521)" }} />
           <span style={{ width: 13, height: 13, borderRadius: "50%", border: "1px solid rgba(0,0,0,0.28)", background: "radial-gradient(circle at 35% 30%, #B6E88A, #5F9A3F)" }} />
-          <span style={{ margin: "0 auto", fontSize: "var(--text-sm)", fontWeight: 600, color: "#4A4A48", textShadow: "0 1px 0 rgba(255,255,255,0.7)" }}>{title}</span>
+          <span id={titleId} style={{ margin: "0 auto", fontSize: "var(--text-sm)", fontWeight: 600, color: "#4A4A48", textShadow: "0 1px 0 rgba(255,255,255,0.7)" }}>{title}</span>
         </div>
         <div className="il-scroll" style={{ padding: 22, overflow: "auto", background: "linear-gradient(180deg, #FBFBF9 0%, #F1F1ED 100%)" }}>
           {children}

@@ -4,10 +4,10 @@ import React from "react";
 export function Badge({ tone = "neutral", children, iconLeft = null, style = {} }) {
   const tones = {
     neutral: { bg: "var(--surface-recessed)", fg: "var(--text-secondary)", bd: "var(--border-strong)" },
-    info: { bg: "var(--surface-lcd)", fg: "var(--accent-primary-press)", bd: "#A9C4DC" },
-    success: { bg: "var(--status-success-soft)", fg: "#4C7A47", bd: "#B9D2B4" },
-    warning: { bg: "var(--status-warning-soft)", fg: "#8A6A1E", bd: "#E0CB8F" },
-    error: { bg: "var(--status-error-soft)", fg: "#8E4444", bd: "#DFB6B6" },
+    info: { bg: "var(--surface-lcd)", fg: "var(--text-lcd)", bd: "var(--border-lcd-soft)" },
+    success: { bg: "var(--status-success-soft)", fg: "var(--text-success)", bd: "var(--border-success)" },
+    warning: { bg: "var(--status-warning-soft)", fg: "var(--text-warning-strong)", bd: "var(--border-warning)" },
+    error: { bg: "var(--status-error-soft)", fg: "var(--text-error)", bd: "var(--border-error)" },
   };
   const t = tones[tone] || tones.neutral;
   return (
@@ -18,9 +18,10 @@ export function Badge({ tone = "neutral", children, iconLeft = null, style = {} 
         gap: 5,
         height: 20,
         padding: "0 9px",
+        fontFamily: "var(--font-typewriter)",
         fontSize: "var(--text-xs)",
-        fontWeight: "var(--weight-semibold)",
-        letterSpacing: "0.02em",
+        fontWeight: "var(--weight-regular)",
+        letterSpacing: "var(--tracking-badge)",
         borderRadius: "var(--radius-pill)",
         background: t.bg,
         color: t.fg,

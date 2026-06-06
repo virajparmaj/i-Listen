@@ -28,7 +28,7 @@ export function Button({
     secondary: { background: "var(--grad-chrome)", color: "var(--text-primary)", border: "1px solid var(--border-strong)", boxShadow: "var(--shadow-card), var(--gloss-top)" },
     graphite: { background: "var(--grad-graphite)", color: "var(--text-on-dark)", border: "1px solid #1f1f21", boxShadow: "var(--shadow-card), var(--gloss-top-dark)" },
     ghost: { background: "transparent", color: "var(--accent-primary)", border: "1px solid transparent", boxShadow: "none" },
-    danger: { background: "linear-gradient(180deg, #C97373 0%, var(--status-error) 100%)", color: "#fff", border: "1px solid #9c4a4a", boxShadow: "var(--shadow-card), var(--gloss-top-dark)" },
+    danger: { background: "linear-gradient(180deg, #C97373 0%, var(--status-error) 100%)", color: "var(--text-on-accent)", border: "1px solid #9c4a4a", boxShadow: "var(--shadow-card), var(--gloss-top-dark)" },
   };
   const v = variants[variant] || variants.secondary;
 

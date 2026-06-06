@@ -1,7 +1,7 @@
 import React from "react";
 
 /** Recessed LCD-style progress track with a glossy fill. */
-export function ProgressBar({ value = 0, tone = "primary", height = 8, showLabel = false, style = {} }) {
+export function ProgressBar({ value = 0, tone = "primary", height = 8, showLabel = false, style = {}, label = "Progress" }) {
   const pct = Math.max(0, Math.min(100, value));
   const fills = {
     primary: "var(--grad-primary)",
@@ -12,6 +12,11 @@ export function ProgressBar({ value = 0, tone = "primary", height = 8, showLabel
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, ...style }}>
       <div
+        role="progressbar"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(pct)}
         style={{
           flex: 1,
           height,
@@ -34,7 +39,7 @@ export function ProgressBar({ value = 0, tone = "primary", height = 8, showLabel
         />
       </div>
       {showLabel && (
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)", color: "var(--text-secondary)", minWidth: 34, textAlign: "right" }}>
+        <span style={{ fontFamily: "var(--font-lcd)", fontSize: 16, letterSpacing: "var(--tracking-lcd)", color: "var(--text-lcd)", minWidth: 34, textAlign: "right", lineHeight: 1 }}>
           {Math.round(pct)}%
         </span>
       )}

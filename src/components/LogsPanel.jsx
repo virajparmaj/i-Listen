@@ -8,20 +8,20 @@ export function LogsPanel({ lines }) {
   }, [lines]);
 
   const color = (kind) =>
-    kind === "ok" ? "#9FD49A" : kind === "warn" ? "#E2C172" : kind === "err" ? "#E59A9A" : "#D6E3EC";
+    kind === "ok" ? "var(--terminal-success)" : kind === "warn" ? "var(--terminal-warning)" : kind === "err" ? "var(--terminal-error)" : "var(--text-terminal)";
 
   return (
-    <div style={{ borderRadius: "var(--radius-md)", overflow: "hidden", border: "1px solid #1c1c1e", boxShadow: "var(--shadow-card)" }}>
+    <div style={{ borderRadius: "var(--radius-md)", overflow: "hidden", border: "1px solid var(--border-graphite)", boxShadow: "var(--shadow-card)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "var(--grad-graphite)", boxShadow: "var(--gloss-top-dark)" }}>
-        <Icon name="logs" size={16} color="#cfd6db" emboss={false} />
-        <span style={{ color: "#e6e9ec", fontSize: "var(--text-sm)", fontWeight: 600 }}>Logs</span>
-        <span style={{ marginLeft: "auto", color: "#8a929a", fontSize: "var(--text-xs)", fontFamily: "var(--font-mono)" }}>{lines.length} lines</span>
+        <Icon name="logs" size={16} color="var(--text-terminal)" emboss={false} />
+        <span style={{ color: "var(--text-terminal)", fontFamily: "var(--font-terminal)", fontSize: "var(--text-sm)", fontWeight: "var(--weight-semibold)" }}>Logs</span>
+        <span style={{ marginLeft: "auto", color: "var(--text-terminal-muted)", fontSize: "var(--text-xs)", fontFamily: "var(--font-terminal)" }}>{lines.length} lines</span>
       </div>
-      <div ref={ref} className="il-scroll" style={{ background: "var(--surface-graphite)", padding: "12px 14px", height: 170, overflow: "auto" }}>
+      <div ref={ref} className="il-scroll" style={{ background: "var(--surface-terminal)", padding: "12px 14px", height: 170, overflow: "auto" }}>
         {lines.map((l, i) => (
-          <div key={i} style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-mono)", lineHeight: 1.7, color: color(l.kind), wordBreak: "break-word" }}>
-            <span style={{ color: "#7E8B95" }}>{l.t}</span>{" "}
-            {l.label && <span style={{ fontWeight: 600 }}>{l.label} </span>}
+          <div key={i} style={{ fontFamily: "var(--font-terminal)", fontSize: "var(--text-mono)", lineHeight: 1.7, color: color(l.kind), wordBreak: "break-word" }}>
+            <span style={{ color: "var(--text-terminal-muted)" }}>{l.t}</span>{" "}
+            {l.label && <span style={{ fontWeight: "var(--weight-semibold)" }}>{l.label} </span>}
             {l.msg}
           </div>
         ))}

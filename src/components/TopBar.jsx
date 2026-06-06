@@ -16,40 +16,40 @@ const ClickWheelMark = () => (
 export function TopBar({ tab, setTab, onOpenSettings, jobInfo }) {
   const tabs = ["Convert", "Library"];
   return (
-    <header style={{
+    <header className="il-topbar" style={{
       display: "flex", alignItems: "center", gap: 16, padding: "0 20px", height: 56,
-      background: "var(--grad-graphite)", borderBottom: "1px solid #1c1c1e",
+      background: "var(--grad-graphite)", borderBottom: "1px solid var(--border-graphite)",
       boxShadow: "var(--gloss-top-dark)", color: "var(--text-on-dark)",
       position: "sticky", top: 0, zIndex: 20,
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+      <div className="il-topbar-brand" style={{ display: "flex", alignItems: "center", gap: 11 }}>
         <ClickWheelMark />
-        <span style={{ fontSize: 22, fontWeight: 600, letterSpacing: "-0.02em" }}>
+        <span style={{ fontFamily: "var(--font-deco)", fontSize: 20, fontWeight: "var(--weight-regular)", letterSpacing: "var(--tracking-wide)", lineHeight: 1 }}>
           <span style={{ color: "var(--ipod-lcd)" }}>i</span>Listen
         </span>
       </div>
-      <nav style={{ display: "flex", gap: 4, marginLeft: 6 }}>
+      <nav className="il-topbar-tabs" style={{ display: "flex", gap: 4, marginLeft: 6 }}>
         {tabs.map((t) => (
           <button key={t} onClick={() => setTab(t)} style={{
             height: 32, padding: "0 16px", borderRadius: "var(--radius-sm)", cursor: "pointer",
-            fontSize: "var(--text-sm)", fontWeight: 500, fontFamily: "var(--font-ui)",
+            fontSize: "var(--text-sm)", fontWeight: "var(--weight-medium)", fontFamily: "var(--font-ui)",
             border: "1px solid " + (tab === t ? "var(--accent-primary-press)" : "transparent"),
             background: tab === t ? "var(--grad-select)" : "transparent",
-            color: tab === t ? "#fff" : "#c7c7cb",
+            color: tab === t ? "var(--text-on-accent)" : "var(--text-on-dark-soft)",
             boxShadow: tab === t ? "var(--gloss-top-dark)" : "none",
           }}>{t}</button>
         ))}
       </nav>
-      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 14 }}>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--text-sm)", color: "#a9a9ad" }}>{jobInfo}</span>
+      <div className="il-topbar-actions" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 14 }}>
+        <span className="il-topbar-jobs" style={{ fontFamily: "var(--font-typewriter)", fontSize: "var(--text-sm)", color: "var(--text-on-dark-muted)" }}>{jobInfo}</span>
         <button onClick={onOpenSettings} title="Settings" style={{
           display: "flex", alignItems: "center", gap: 7, height: 32, padding: "0 12px",
-          borderRadius: "var(--radius-sm)", cursor: "pointer", color: "#e6e6e8",
+          borderRadius: "var(--radius-sm)", cursor: "pointer", color: "var(--text-on-dark)",
           background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
           fontSize: "var(--text-sm)", fontFamily: "var(--font-ui)",
         }}>
-          <Icon name="prefs" size={15} color="#e6e6e8" emboss={false} />
-          Settings
+          <Icon name="prefs" size={15} color="var(--text-on-dark)" emboss={false} />
+          <span className="il-settings-label">Settings</span>
         </button>
       </div>
     </header>
