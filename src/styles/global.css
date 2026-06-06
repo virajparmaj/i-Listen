@@ -181,6 +181,11 @@ a:hover { text-decoration: underline; }
 }
 
 @media (max-width: 520px) {
+  .il-topbar-brand .il-brandmark-wordmark,
+  .il-topbar-brand .il-brandmark-subtitle {
+    display: none;
+  }
+
   .il-topbar-actions button {
     width: 40px;
     padding: 0 !important;

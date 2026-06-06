@@ -1,17 +1,6 @@
 import React from "react";
 import { Icon } from "./ui/Icon.jsx";
-
-const ClickWheelMark = () => (
-  <span style={{
-    width: 30, height: 30, borderRadius: "50%", flex: "none",
-    background: "radial-gradient(circle at 50% 35%, #FCFCFB 0%, #DCDCD8 60%, #BEBEB9 100%)",
-    border: "1px solid #9a9a96",
-    boxShadow: "inset 0 1px 1px rgba(255,255,255,0.9), 0 1px 2px rgba(0,0,0,0.4)",
-    display: "flex", alignItems: "center", justifyContent: "center",
-  }}>
-    <span style={{ width: 11, height: 11, borderRadius: "50%", background: "radial-gradient(circle at 50% 35%, #F2F2F1, #CFCFCA)", border: "1px solid #adada8" }} />
-  </span>
-);
+import { BrandMark } from "./ui/BrandMark.jsx";
 
 export function TopBar({ tab, setTab, onOpenSettings, jobInfo }) {
   const tabs = ["Convert", "Library"];
@@ -22,11 +11,8 @@ export function TopBar({ tab, setTab, onOpenSettings, jobInfo }) {
       boxShadow: "var(--gloss-top-dark)", color: "var(--text-on-dark)",
       position: "sticky", top: 0, zIndex: 20,
     }}>
-      <div className="il-topbar-brand" style={{ display: "flex", alignItems: "center", gap: 11 }}>
-        <ClickWheelMark />
-        <span style={{ fontFamily: "var(--font-deco)", fontSize: 20, fontWeight: "var(--weight-regular)", letterSpacing: "var(--tracking-wide)", lineHeight: 1 }}>
-          <span style={{ color: "var(--ipod-lcd)" }}>i</span>Listen
-        </span>
+      <div className="il-topbar-brand" style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
+        <BrandMark showWordmark size={30} />
       </div>
       <nav className="il-topbar-tabs" style={{ display: "flex", gap: 4, marginLeft: 6 }}>
         {tabs.map((t) => (

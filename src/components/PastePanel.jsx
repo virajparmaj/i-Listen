@@ -2,6 +2,7 @@ import React from "react";
 import { Card } from "./ui/Card.jsx";
 import { Button } from "./ui/Button.jsx";
 import { Icon } from "./ui/Icon.jsx";
+import { BrandMark } from "./ui/BrandMark.jsx";
 
 /** Paste links + primary conversion CTA. */
 export function PastePanel({ onAdd, onConvert, queueCount = 0, helper }) {
@@ -29,9 +30,13 @@ export function PastePanel({ onAdd, onConvert, queueCount = 0, helper }) {
   return (
     <Card style={{ padding: 0, overflow: "hidden" }}>
       <div style={{ padding: "22px 24px 16px" }}>
-        <div style={{ fontFamily: "var(--font-deco)", fontSize: 12, letterSpacing: "var(--tracking-deco)", textTransform: "uppercase", color: "var(--accent-vintage)", marginBottom: 10 }}>
-          iListen Hi&middot;Fi
-        </div>
+        <BrandMark
+          showWordmark
+          size={48}
+          subtitle="Hi-Fi"
+          style={{ marginBottom: 12, color: "var(--text-primary)" }}
+          wordmarkStyle={{ marginTop: 1 }}
+        />
         <h1 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h1)", fontWeight: "var(--weight-regular)", lineHeight: 1.06, margin: "0 0 8px", color: "var(--text-primary)" }}>
           Paste YouTube links. Convert iPod-ready files.
         </h1>

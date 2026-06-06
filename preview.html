@@ -1,6 +1,8 @@
 <!doctype html>
 <html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>iListen — Converter (preview)</title>
+<link rel="icon" type="image/png" href="./i-listen-logo.png" />
+<link rel="apple-touch-icon" href="./i-listen-logo.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Limelight&family=Kaushan+Script&family=Special+Elite&family=VT323&display=swap" rel="stylesheet" />
 <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
@@ -1150,18 +1152,45 @@ function useConverter() {
   };
 }
 
+/* ===== shared brand mark ===== */
+const BRAND_LOGO_SRC = "./i-listen-logo.png";
+function BrandMark({ showWordmark = false, size = 32, label = "iListen", subtitle = null, style = {}, imageStyle = {}, wordmarkStyle = {} }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, ...style }}>
+      <img
+        src={BRAND_LOGO_SRC}
+        alt={showWordmark ? "" : label}
+        aria-hidden={showWordmark ? true : undefined}
+        width={size}
+        height={size}
+        style={{
+          width: typeof size === "number" ? `${size}px` : size,
+          height: typeof size === "number" ? `${size}px` : size,
+          display: "block",
+          flex: "none",
+          borderRadius: "50%",
+          objectFit: "cover",
+          boxShadow: "0 1px 2px rgba(0,0,0,0.28), inset 0 1px 1px rgba(255,255,255,0.28)",
+          ...imageStyle,
+        }}
+      />
+      {showWordmark ? (
+        <div style={{ display: "flex", flexDirection: "column", minWidth: 0, lineHeight: 1, ...wordmarkStyle }}>
+          <span style={{ fontFamily: "var(--font-deco)", fontSize: 20, fontWeight: "var(--weight-regular)", letterSpacing: "var(--tracking-wide)", color: "inherit", whiteSpace: "nowrap" }}>
+            <span style={{ color: "var(--ipod-lcd)" }}>i</span>Listen
+          </span>
+          {subtitle ? (
+            <span style={{ marginTop: 4, fontFamily: "var(--font-typewriter)", fontSize: "var(--text-xs)", letterSpacing: "var(--tracking-label)", color: "currentColor", opacity: 0.72, textTransform: "uppercase", whiteSpace: "nowrap" }}>
+              {subtitle}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /* ===== components/TopBar.jsx ===== */
-const ClickWheelMark = () => (
-  <span style={{
-    width: 30, height: 30, borderRadius: "50%", flex: "none",
-    background: "radial-gradient(circle at 50% 35%, #FCFCFB 0%, #DCDCD8 60%, #BEBEB9 100%)",
-    border: "1px solid #9a9a96",
-    boxShadow: "inset 0 1px 1px rgba(255,255,255,0.9), 0 1px 2px rgba(0,0,0,0.4)",
-    display: "flex", alignItems: "center", justifyContent: "center",
-  }}>
-    <span style={{ width: 11, height: 11, borderRadius: "50%", background: "radial-gradient(circle at 50% 35%, #F2F2F1, #CFCFCA)", border: "1px solid #adada8" }} />
-  </span>
-);
 function TopBar({ tab, setTab, onOpenSettings, jobInfo }) {
   const tabs = ["Convert", "Library"];
   return (
@@ -1171,11 +1200,8 @@ function TopBar({ tab, setTab, onOpenSettings, jobInfo }) {
       boxShadow: "var(--gloss-top-dark)", color: "var(--text-on-dark)",
       position: "sticky", top: 0, zIndex: 20,
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
-        <ClickWheelMark />
-        <span style={{ fontFamily: "var(--font-deco)", fontSize: 20, fontWeight: "var(--weight-regular)", letterSpacing: "var(--tracking-wide)", lineHeight: 1 }}>
-          <span style={{ color: "var(--ipod-lcd)" }}>i</span>Listen
-        </span>
+      <div style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
+        <BrandMark showWordmark size={30} />
       </div>
       <nav style={{ display: "flex", gap: 4, marginLeft: 6 }}>
         {tabs.map((t) => (
@@ -1219,9 +1245,7 @@ function PastePanel({ onAdd }) {
   return (
     <Card style={{ padding: 0, overflow: "hidden" }}>
       <div style={{ padding: "22px 24px 16px" }}>
-        <div style={{ fontFamily: "var(--font-deco)", fontSize: 12, letterSpacing: "var(--tracking-deco)", textTransform: "uppercase", color: "var(--accent-vintage)", marginBottom: 10 }}>
-          iListen Hi&middot;Fi
-        </div>
+        <BrandMark showWordmark size={48} subtitle="Hi-Fi" style={{ marginBottom: 12, color: "var(--text-primary)" }} wordmarkStyle={{ marginTop: 1 }} />
         <h1 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h1)", fontWeight: "var(--weight-regular)", lineHeight: 1.06, margin: "0 0 8px", color: "var(--text-primary)" }}>
           Queue YouTube links for an iPod conversion backend.
         </h1>

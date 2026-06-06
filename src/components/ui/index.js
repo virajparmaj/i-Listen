@@ -10,3 +10,4 @@ export { ProgressBar } from "./ProgressBar.jsx";
 export { Switch } from "./Switch.jsx";
 export { Slider } from "./Slider.jsx";
 export { Modal } from "./Modal.jsx";
+export { BrandMark } from "./BrandMark.jsx";
