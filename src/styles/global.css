@@ -30,6 +30,9 @@ a:hover { text-decoration: underline; }
 
 /* Faint early-Aqua pinstripe behind the whole app */
 .il-desktop {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
   min-height: 100%;
   background-image: repeating-linear-gradient(
     180deg, rgba(255, 255, 255, 0.45) 0 1px, transparent 1px 5px
@@ -70,30 +73,48 @@ a:hover { text-decoration: underline; }
   z-index: 140;
 }
 
+.il-app-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: clamp(18px, 2vw, 28px) clamp(18px, 2vw, 30px) 48px;
+  box-sizing: border-box;
+  min-height: 0;
+}
+
 .il-import-grid {
   display: grid;
-  grid-template-columns: minmax(340px, 1fr) minmax(300px, 320px);
+  grid-template-columns: minmax(380px, 1.2fr) minmax(320px, 1fr);
   grid-template-areas: "entry settings";
-  gap: 14px;
+  gap: clamp(14px, 1.2vw, 20px);
   align-items: stretch;
   padding: 16px 20px 12px;
 }
 
 .il-convert-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) clamp(320px, 24vw, 420px);
+  gap: clamp(18px, 1.5vw, 28px);
   align-items: stretch;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .il-convert-main {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 18px;
+  min-height: 0;
   min-width: 0;
 }
 
 .il-side-rail-shell {
+  display: flex;
+  min-height: 0;
   min-width: 0;
 }
 
@@ -101,10 +122,17 @@ a:hover { text-decoration: underline; }
   position: sticky;
   top: 78px;
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 18px;
   min-height: 100%;
   height: 100%;
+}
+
+.il-queue-section {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .il-side-rail-export {
@@ -135,8 +163,37 @@ a:hover { text-decoration: underline; }
     0 2px 6px rgba(78, 73, 60, 0.08) !important;
 }
 
+.il-queue-card {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.il-queue-list {
+  flex: 1 1 auto;
+}
+
+.il-queue-empty {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
 .il-modal-footer > button {
   min-width: 108px;
+}
+
+@media (min-width: 1500px) {
+  .il-convert-grid {
+    grid-template-columns: minmax(0, 1.3fr) clamp(340px, 25vw, 440px);
+  }
+
+  .il-import-grid {
+    grid-template-columns: minmax(420px, 1.15fr) minmax(340px, 1fr);
+  }
 }
 
 .il-import-grid-single {

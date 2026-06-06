@@ -9,7 +9,7 @@ export function Queue({ tracks, onEdit, onArt, onDownload, onRetry, onRemove, on
   const failed = tracks.filter((t) => t.status === "failed").length;
 
   return (
-    <Card style={{ padding: 0, overflow: "hidden" }}>
+    <Card className="il-queue-card" style={{ padding: 0, overflow: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "13px 18px", borderBottom: "1px solid var(--border-soft)", background: "var(--grad-chrome)" }}>
         <Icon name="queue" size={18} />
           <span style={{ fontFamily: "var(--font-display)", fontWeight: "var(--weight-regular)", fontSize: "var(--text-h3)", lineHeight: "var(--leading-tight)" }}>Conversion queue</span>
@@ -22,13 +22,13 @@ export function Queue({ tracks, onEdit, onArt, onDownload, onRetry, onRemove, on
       </div>
 
       {tracks.length === 0 ? (
-        <div style={{ padding: "40px 18px", textAlign: "center", color: "var(--text-secondary)" }}>
+        <div className="il-queue-empty" style={{ padding: "40px 18px", textAlign: "center", color: "var(--text-secondary)" }}>
           <Icon name="note" size={28} color="var(--border-strong)" style={{ margin: "0 auto 10px" }} />
           <div style={{ fontSize: "var(--text-body)" }}>Your queue is empty.</div>
           <div style={{ fontSize: "var(--text-sm)" }}>Paste YouTube links above to prepare iPod-ready files.</div>
         </div>
       ) : (
-        <div>
+        <div className="il-queue-list">
           {tracks.map((t, i) => (
             <QueueRow
               key={t.id}

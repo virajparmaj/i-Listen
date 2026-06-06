@@ -122,7 +122,7 @@ export default function App() {
       />
       <LocalHelperPanel helper={helper} />
 
-      <main style={{ maxWidth: "var(--container-max)", width: "100%", margin: "0 auto", padding: "22px 22px 48px", boxSizing: "border-box" }}>
+      <main className="il-app-main">
         {tab === "Convert" ? (
           <div className="il-convert-grid">
             <div className="il-convert-main">
@@ -156,7 +156,7 @@ export default function App() {
                   />
                 )}
               />
-              <div id="queue">
+              <div id="queue" className="il-queue-section">
                 <Queue
                   tracks={tracks}
                   onEdit={setEditTrack}
