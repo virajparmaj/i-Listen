@@ -75,8 +75,68 @@ a:hover { text-decoration: underline; }
   grid-template-columns: minmax(340px, 1fr) minmax(300px, 320px);
   grid-template-areas: "entry settings";
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
   padding: 16px 20px 12px;
+}
+
+.il-convert-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 20px;
+  align-items: stretch;
+}
+
+.il-convert-main {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.il-side-rail-shell {
+  min-width: 0;
+}
+
+.il-side-rail {
+  position: sticky;
+  top: 78px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 100%;
+  height: 100%;
+}
+
+.il-side-rail-export {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.il-side-rail-export > * {
+  width: 100%;
+}
+
+.il-export-card {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 100%;
+}
+
+.il-import-card,
+.il-export-card {
+  background: linear-gradient(180deg, #fffefa 0%, #f3f1eb 100%) !important;
+  border: 1px solid #d7d2c7 !important;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.95) inset,
+    0 10px 22px rgba(118, 112, 94, 0.08),
+    0 2px 6px rgba(78, 73, 60, 0.08) !important;
+}
+
+.il-modal-footer > button {
+  min-width: 108px;
 }
 
 .il-import-grid-single {
@@ -92,7 +152,9 @@ a:hover { text-decoration: underline; }
 
 .il-paste-entry {
   grid-area: entry;
-  min-height: 194px;
+  min-height: 206px;
+  display: flex;
+  flex-direction: column;
   padding: 14px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
@@ -101,11 +163,16 @@ a:hover { text-decoration: underline; }
 
 .il-import-settings {
   grid-area: settings;
-  min-height: 194px;
+  min-height: 206px;
+  display: flex;
   padding: 14px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
   background: linear-gradient(180deg, rgba(255,255,255,0.72), rgba(244,244,241,0.38));
+}
+
+.il-output-controls {
+  width: 100%;
 }
 
 .il-paste-brand-row {
@@ -135,8 +202,8 @@ a:hover { text-decoration: underline; }
 
 .il-link-textarea {
   width: 100%;
-  min-height: 68px;
-  max-height: 124px;
+  min-height: 92px;
+  flex: 1 1 auto;
   box-sizing: border-box;
   margin-top: 8px;
   resize: vertical;
@@ -185,12 +252,12 @@ a:hover { text-decoration: underline; }
 
 .il-preset-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 9px;
 }
 
 .il-preset-card {
-  min-height: 86px;
+  min-height: 78px;
   text-align: left;
   cursor: pointer;
   padding: 10px 11px;
@@ -278,6 +345,13 @@ a:hover { text-decoration: underline; }
 
 .il-output-controls-compact .il-preset-copy-technical {
   display: none;
+}
+
+.il-output-controls-compact {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 100%;
 }
 
 .il-output-controls-compact .il-preset-name,
@@ -461,6 +535,11 @@ a:hover { text-decoration: underline; }
 
   .il-paste-entry {
     min-height: 0;
+  }
+
+  .il-link-textarea {
+    min-height: 78px;
+    flex: none;
   }
 
   .il-convert-row {

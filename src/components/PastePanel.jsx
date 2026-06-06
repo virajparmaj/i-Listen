@@ -8,6 +8,7 @@ import { BrandMark } from "./ui/BrandMark.jsx";
 export function PastePanel({ onAdd, onConvert, queueCount = 0, helper, outputControls = null }) {
   const [links, setLinks] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const [converting, setConverting] = React.useState(false);
   const count = links.split("\n").filter((l) => l.trim()).length;
 
   const add = async () => {
@@ -17,6 +18,15 @@ export function PastePanel({ onAdd, onConvert, queueCount = 0, helper, outputCon
       if (n > 0) setLinks("");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const convert = async () => {
+    setConverting(true);
+    try {
+      await onConvert();
+    } finally {
+      setConverting(false);
     }
   };
 
@@ -73,8 +83,13 @@ export function PastePanel({ onAdd, onConvert, queueCount = 0, helper, outputCon
       </div>
 
       <div className="il-convert-row">
-        <Button variant="primary" size="md" disabled={!queueCount || !helperReady} onClick={onConvert}>
-          Convert queued links
+        <Button
+          variant="primary"
+          size="md"
+          disabled={!queueCount || !helperReady || converting}
+          onClick={convert}
+        >
+          {converting ? "Converting" : "Convert"}
         </Button>
         <span className="il-convert-hint">
           {helperCopy}

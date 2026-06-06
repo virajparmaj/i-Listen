@@ -9,7 +9,7 @@ export function ExportBar({ completeCount, totalCount, locked = false, helperCon
   const reportDisabled = locked || !totalCount;
   const libraryDisabled = locked || !completeCount;
   return (
-    <Card style={{ padding: 16 }}>
+    <Card className="il-export-card" style={{ padding: 16 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
         <span style={{ fontFamily: "var(--font-display)", fontWeight: "var(--weight-regular)", fontSize: "var(--text-h3)", lineHeight: "var(--leading-tight)" }}>Export</span>
         <span style={{ fontFamily: "var(--font-typewriter)", fontSize: "var(--text-xs)", color: "var(--text-secondary)" }}>

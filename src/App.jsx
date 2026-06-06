@@ -124,8 +124,8 @@ export default function App() {
 
       <main style={{ maxWidth: "var(--container-max)", width: "100%", margin: "0 auto", padding: "22px 22px 48px", boxSizing: "border-box" }}>
         {tab === "Convert" ? (
-          <div className="il-convert-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 300px", gap: 20, alignItems: "start" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 18, minWidth: 0 }}>
+          <div className="il-convert-grid">
+            <div className="il-convert-main">
               <PastePanel
                 onAdd={async (text) => {
                   try {
@@ -172,18 +172,24 @@ export default function App() {
               </div>
             </div>
 
-            <div className="il-side-rail" style={{ display: "flex", flexDirection: "column", gap: 18, position: "sticky", top: 78 }}>
-              <IpodPreview track={nowPlaying} />
-              <ExportBar
-                completeCount={completed.length}
-                totalCount={tracks.length}
-                selectedCount={selectedCompleted.length}
-                onZip={onZip}
-                onLibrary={onLibrary}
-                onCSV={onCSV}
-                onSelected={onSelected}
-                helperConnected={helper.connected}
-              />
+            <div className="il-side-rail-shell">
+              <div className="il-side-rail">
+                <div className="il-side-rail-preview">
+                  <IpodPreview track={nowPlaying} />
+                </div>
+                <div className="il-side-rail-export">
+                  <ExportBar
+                    completeCount={completed.length}
+                    totalCount={tracks.length}
+                    selectedCount={selectedCompleted.length}
+                    onZip={onZip}
+                    onLibrary={onLibrary}
+                    onCSV={onCSV}
+                    onSelected={onSelected}
+                    helperConnected={helper.connected}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         ) : (

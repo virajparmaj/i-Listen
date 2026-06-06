@@ -78,7 +78,19 @@ export function Modal({ open, onClose, title = "", width = 560, children, footer
           {children}
         </div>
         {footer && (
-          <div style={{ padding: "12px 18px", display: "flex", justifyContent: "flex-end", gap: 10, borderTop: "1px solid var(--border-soft)", background: "var(--surface-recessed)", flex: "none" }}>
+          <div
+            className="il-modal-footer"
+            style={{
+              padding: "12px 18px",
+              display: "flex",
+              justifyContent: "flex-end",
+              alignItems: "center",
+              gap: 10,
+              borderTop: "1px solid var(--border-soft)",
+              background: "var(--surface-recessed)",
+              flex: "none",
+            }}
+          >
             {footer}
           </div>
         )}

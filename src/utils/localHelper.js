@@ -12,17 +12,23 @@ function setStoredToken(token) {
 }
 
 async function request(path, options = {}) {
-  const headers = {
-    "Content-Type": "application/json",
-    ...(options.headers || {}),
-  };
+  const headers = { ...(options.headers || {}) };
+  const hasContentType = Object.keys(headers).some((key) => key.toLowerCase() === "content-type");
+  if (options.body !== undefined && !hasContentType) {
+    headers["Content-Type"] = "application/json";
+  }
   const token = storedToken();
   if (token) headers["x-ilisten-token"] = token;
 
-  const response = await fetch(`${helperBaseUrl}${path}`, {
-    ...options,
-    headers,
-  });
+  let response;
+  try {
+    response = await fetch(`${helperBaseUrl}${path}`, {
+      ...options,
+      headers,
+    });
+  } catch (error) {
+    throw new Error(`Cannot reach local helper at ${helperBaseUrl}: ${error.message}`);
+  }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `Local helper returned ${response.status}`);
   return data;

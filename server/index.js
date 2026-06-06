@@ -32,8 +32,14 @@ function corsHeaders(req) {
   const headers = {
     "Access-Control-Allow-Headers": "content-type, x-ilisten-token",
     "Access-Control-Allow-Methods": "GET,POST,PATCH,OPTIONS",
+    Vary: "Origin, Access-Control-Request-Private-Network",
   };
-  if (isAllowedOrigin(origin)) headers["Access-Control-Allow-Origin"] = origin || "*";
+  if (isAllowedOrigin(origin)) {
+    headers["Access-Control-Allow-Origin"] = origin || "*";
+    if (req.headers["access-control-request-private-network"] === "true") {
+      headers["Access-Control-Allow-Private-Network"] = "true";
+    }
+  }
   return headers;
 }
 
