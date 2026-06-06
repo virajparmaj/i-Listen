@@ -18,25 +18,30 @@ function ToolLine({ tool }) {
 export function LocalHelperPanel({ helper }) {
   const connected = helper.connected;
   const ready = connected && helper.tools?.ready;
-  const tone = ready ? "success" : connected ? "warning" : "error";
+  const checking = helper.pairing || !helper.checked || (connected && !helper.tools);
+  const tone = checking ? "warning" : connected ? "warning" : "error";
+  const title = checking ? "Checking local helper" : connected ? "Helper needs tools" : "Local helper offline";
+  const message = checking
+    ? "Looking for the localhost converter."
+    : connected
+      ? "Install or configure the missing converter tools before starting jobs."
+      : helper.error || `Run ${helper.setupCommand} in this project, then reload.`;
+
+  if (ready) return null;
 
   return (
-    <Card style={{ padding: 14 }}>
+    <Card className="il-helper-popover il-fade-in" role="status" aria-live="polite" style={{ padding: 14 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-        <Icon name={ready ? "done" : "warn"} size={16} color={ready ? "var(--status-success)" : "var(--status-warning)"} />
-        <span style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-body-lg)", lineHeight: 1.1 }}>Local helper</span>
+        <Icon name={connected || checking ? "warn" : "fail"} size={16} color={connected || checking ? "var(--status-warning)" : "var(--status-error)"} />
+        <span style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-body-lg)", lineHeight: 1.1 }}>{title}</span>
         <span style={{ marginLeft: "auto" }}>
-          <Badge tone={tone}>{ready ? "Ready" : connected ? "Needs tools" : "Offline"}</Badge>
+          <Badge tone={tone}>{checking ? "Checking" : connected ? "Needs tools" : "Offline"}</Badge>
         </span>
       </div>
 
       <div style={{ display: "grid", gap: 8 }}>
         <div style={{ fontFamily: "var(--font-typewriter)", fontSize: "var(--text-xs)", color: "var(--text-secondary)", lineHeight: 1.45 }}>
-          {ready
-            ? "Conversions run on this Mac through the localhost helper."
-            : connected
-              ? "Install or configure the missing converter tools before starting jobs."
-              : `Run ${helper.setupCommand} in this project, then reload the web app.`}
+          {message}
         </div>
 
         <div style={{ fontFamily: "var(--font-typewriter)", fontSize: "var(--text-xs)", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>

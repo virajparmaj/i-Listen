@@ -4,7 +4,7 @@ import { Button } from "./ui/Button.jsx";
 import { Icon } from "./ui/Icon.jsx";
 
 /** Export / download actions. */
-export function ExportBar({ completeCount, totalCount, locked = false, helperConnected = false, onZip, onLibrary, onCSV, onLogs, onSelected }) {
+export function ExportBar({ completeCount, totalCount, locked = false, helperConnected = false, onZip, onLibrary, onCSV, onSelected }) {
   const exportDisabled = locked || (helperConnected ? !completeCount : !totalCount);
   const reportDisabled = locked || !totalCount;
   const libraryDisabled = locked || !completeCount;
@@ -26,10 +26,7 @@ export function ExportBar({ completeCount, totalCount, locked = false, helperCon
         <Button variant="secondary" fullWidth disabled={libraryDisabled} iconLeft={<Icon name="zip" size={14} />} onClick={onLibrary}>
           Download library report
         </Button>
-        <div style={{ display: "flex", gap: 8 }}>
-          <Button variant="ghost" style={{ flex: 1 }} iconLeft={<Icon name="csv" size={14} />} onClick={onCSV}>CSV report</Button>
-          <Button variant="ghost" style={{ flex: 1 }} iconLeft={<Icon name="logs" size={14} />} onClick={onLogs}>Logs</Button>
-        </div>
+        <Button variant="ghost" fullWidth iconLeft={<Icon name="csv" size={14} />} onClick={onCSV}>CSV report</Button>
       </div>
     </Card>
   );

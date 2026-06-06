@@ -13,7 +13,8 @@ import { MetadataEditor } from "./components/MetadataEditor.jsx";
 import { CoverArtModal } from "./components/CoverArtModal.jsx";
 import { SettingsModal } from "./components/SettingsModal.jsx";
 import { LocalHelperPanel } from "./components/LocalHelperPanel.jsx";
-import { exportBackendManifest, exportCSV, exportLogs, exportLibraryManifest, filenameFor } from "./utils/download.js";
+import { Modal } from "./components/ui/Modal.jsx";
+import { exportBackendManifest, exportCSV, exportLibraryManifest, filenameFor } from "./utils/download.js";
 
 function Toast({ msg }) {
   if (!msg) return null;
@@ -32,13 +33,12 @@ function Toast({ msg }) {
 export default function App() {
   const { tracks, logs, settings, globalCover, helper, actions } = useConverter();
   const [tab, setTab] = React.useState("Convert");
-  const [preset, setPreset] = React.useState("best");
-  const [outputOption, setOutputOption] = React.useState(settings.defaultOutput);
   const [selectedIds, setSelectedIds] = React.useState(() => new Set());
 
   const [editTrack, setEditTrack] = React.useState(null);
   const [artTarget, setArtTarget] = React.useState(null); // 'all' | trackId | null
   const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [logsOpen, setLogsOpen] = React.useState(false);
   const [toast, setToast] = React.useState("");
 
   const toastRef = React.useRef(null);
@@ -52,6 +52,8 @@ export default function App() {
   const selectedCompleted = completed.filter((t) => selectedIds.has(t.id));
   const nowPlaying = completed[completed.length - 1] || null;
   const pattern = settings.filenamePattern;
+  const outputOption = settings.defaultOutput;
+  const preset = outputOption === "best-youtube" ? "best" : outputOption === "mp3-v0" ? "mp3" : null;
   const exportOptions = { avoidOverwrite: settings.avoidOverwrite };
 
   React.useEffect(() => {
@@ -64,8 +66,7 @@ export default function App() {
 
   const setPresetAndOutput = (id) => {
     const nextPreset = presetFor(id);
-    setPreset(nextPreset.id);
-    setOutputOption(nextPreset.outputOption);
+    actions.updateSettings({ defaultOutput: nextPreset.outputOption });
   };
 
   const toggleSelected = (id) => {
@@ -98,7 +99,6 @@ export default function App() {
     showToast("Conversion plan downloaded.");
   };
   const onCSV = () => { exportCSV(tracks); actions.pushLog("Exported CSV report.", null, "Export:"); showToast("CSV report downloaded."); };
-  const onLogs = () => { exportLogs(logs); showToast("Logs exported."); };
   const onDownloadOne = (t) => showToast(t.outputPath ? `"${t.title}" is ready at ${t.outputPath}` : `"${filenameFor(t, pattern)}" is a planned filename until conversion completes.`);
 
   const applyArt = (art) => {
@@ -112,11 +112,19 @@ export default function App() {
 
   return (
     <div className="il-desktop">
-      <TopBar tab={tab} setTab={setTab} onOpenSettings={() => setSettingsOpen(true)} jobInfo={jobInfo} />
+      <TopBar
+        tab={tab}
+        setTab={setTab}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenLogs={() => setLogsOpen(true)}
+        logCount={logs.length}
+        jobInfo={jobInfo}
+      />
+      <LocalHelperPanel helper={helper} />
 
       <main style={{ maxWidth: "var(--container-max)", width: "100%", margin: "0 auto", padding: "22px 22px 48px", boxSizing: "border-box" }}>
         {tab === "Convert" ? (
-          <div className="il-convert-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 320px", gap: 20, alignItems: "start" }}>
+          <div className="il-convert-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 300px", gap: 20, alignItems: "start" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 18, minWidth: 0 }}>
               <PastePanel
                 onAdd={async (text) => {
@@ -140,6 +148,13 @@ export default function App() {
                 }}
                 queueCount={tracks.filter((t) => ["queued", "failed", "canceled"].includes(t.status)).length}
                 helper={helper}
+                outputControls={(
+                  <OutputControls
+                    compact
+                    preset={preset}
+                    setPreset={setPresetAndOutput}
+                  />
+                )}
               />
               <div id="queue">
                 <Queue
@@ -155,11 +170,10 @@ export default function App() {
                   onToggleSelect={toggleSelected}
                 />
               </div>
-              <LogsPanel lines={logs} />
             </div>
 
             <div className="il-side-rail" style={{ display: "flex", flexDirection: "column", gap: 18, position: "sticky", top: 78 }}>
-              <LocalHelperPanel helper={helper} />
+              <IpodPreview track={nowPlaying} />
               <ExportBar
                 completeCount={completed.length}
                 totalCount={tracks.length}
@@ -167,31 +181,9 @@ export default function App() {
                 onZip={onZip}
                 onLibrary={onLibrary}
                 onCSV={onCSV}
-                onLogs={onLogs}
                 onSelected={onSelected}
                 helperConnected={helper.connected}
               />
-              <OutputControls
-                preset={preset}
-                setPreset={setPresetAndOutput}
-                outputOption={outputOption}
-                setOutputOption={(o) => { setOutputOption(o); }}
-                pattern={pattern}
-                setPattern={(p) => actions.updateSettings({ filenamePattern: p })}
-                onApplyAll={() => { actions.applyToAll({ preset, outputOption }); showToast("Applied planned preset & output to queued imports."); }}
-              />
-              <button
-                onClick={() => setArtTarget("all")}
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8, height: 36,
-                  borderRadius: "var(--radius-sm)", cursor: "pointer", fontFamily: "var(--font-ui)",
-                  fontSize: "var(--text-sm)", fontWeight: "var(--weight-medium)", color: "var(--text-primary)",
-                  background: "var(--grad-chrome)", border: "1px solid var(--border-strong)", boxShadow: "var(--shadow-card), var(--gloss-top)",
-                }}
-              >
-                Cover art for all tracks…
-              </button>
-              <IpodPreview track={nowPlaying} />
             </div>
           </div>
         ) : (
@@ -202,6 +194,9 @@ export default function App() {
       <MetadataEditor open={!!editTrack} track={editTrack} resizeArtwork={settings.resizeArtwork} onClose={() => setEditTrack(null)} onSave={(id, patch) => { actions.updateTrack(id, patch); setEditTrack(null); showToast("Metadata saved."); }} />
       <CoverArtModal open={!!artTarget} value={artTarget === "all" ? globalCover : (tracks.find((t) => t.id === artTarget)?.coverArt || null)} resizeArtwork={settings.resizeArtwork} onClose={() => setArtTarget(null)} onApply={applyArt} />
       <SettingsModal open={settingsOpen} settings={settings} onClose={() => setSettingsOpen(false)} onChange={actions.updateSettings} />
+      <Modal open={logsOpen} onClose={() => setLogsOpen(false)} title={`Logs · ${logs.length} lines`} width={860}>
+        <LogsPanel lines={logs} showHeader={false} height="min(58vh, 520px)" />
+      </Modal>
 
       <Toast msg={toast} />
     </div>

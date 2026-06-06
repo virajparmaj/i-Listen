@@ -2,7 +2,7 @@ import React from "react";
 import { Icon } from "./ui/Icon.jsx";
 import { BrandMark } from "./ui/BrandMark.jsx";
 
-export function TopBar({ tab, setTab, onOpenSettings, jobInfo }) {
+export function TopBar({ tab, setTab, onOpenSettings, onOpenLogs, logCount = 0, jobInfo }) {
   const tabs = ["Convert", "Library"];
   return (
     <header className="il-topbar" style={{
@@ -28,6 +28,16 @@ export function TopBar({ tab, setTab, onOpenSettings, jobInfo }) {
       </nav>
       <div className="il-topbar-actions" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 14 }}>
         <span className="il-topbar-jobs" style={{ fontFamily: "var(--font-typewriter)", fontSize: "var(--text-sm)", color: "var(--text-on-dark-muted)" }}>{jobInfo}</span>
+        <button onClick={onOpenLogs} title="Logs" style={{
+          display: "flex", alignItems: "center", gap: 7, height: 32, padding: "0 12px",
+          borderRadius: "var(--radius-sm)", cursor: "pointer", color: "var(--text-on-dark)",
+          background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
+          fontSize: "var(--text-sm)", fontFamily: "var(--font-ui)",
+        }}>
+          <Icon name="logs" size={15} color="var(--text-on-dark)" emboss={false} />
+          <span className="il-logs-label">Logs</span>
+          <span className="il-topbar-log-count" style={{ fontFamily: "var(--font-typewriter)", fontSize: "var(--text-xs)", color: "var(--text-on-dark-muted)" }}>{logCount}</span>
+        </button>
         <button onClick={onOpenSettings} title="Settings" style={{
           display: "flex", alignItems: "center", gap: 7, height: 32, padding: "0 12px",
           borderRadius: "var(--radius-sm)", cursor: "pointer", color: "var(--text-on-dark)",
