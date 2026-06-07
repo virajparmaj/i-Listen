@@ -4,17 +4,25 @@ import { Badge } from "./ui/Badge.jsx";
 import { ProgressBar } from "./ui/ProgressBar.jsx";
 import { Button } from "./ui/Button.jsx";
 import { Icon } from "./ui/Icon.jsx";
+import { ArtworkThumb } from "./ArtworkThumb.jsx";
 
 function Thumb({ track }) {
   return (
-    <div style={{
-      width: 46, height: 46, flex: "none", borderRadius: "var(--radius-xs)",
-      border: "1px solid var(--border-strong)", boxShadow: "var(--shadow-inset)",
-      background: track.coverArt ? `center/cover no-repeat url(${track.coverArt})` : track.thumbColor,
-      display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
-    }}>
-      {!track.coverArt && <Icon name="note" size={20} color="rgba(255,255,255,0.92)" emboss={false} />}
-    </div>
+    <ArtworkThumb
+      primarySrc={track.coverArt}
+      fallbackSrc={track.thumbnailUrl}
+      thumbColor={track.thumbColor}
+      alt={`${track.title} cover`}
+      iconSize={20}
+      style={{
+        width: 46,
+        height: 46,
+        flex: "none",
+        borderRadius: "var(--radius-xs)",
+        border: "1px solid var(--border-strong)",
+        boxShadow: "var(--shadow-inset)",
+      }}
+    />
   );
 }
 

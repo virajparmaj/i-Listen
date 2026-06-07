@@ -1,9 +1,10 @@
 import React from "react";
 import { Icon } from "./ui/Icon.jsx";
+import { ArtworkThumb } from "./ArtworkThumb.jsx";
 
 /** Compact iPod Classic "Now Playing" preview with a working click wheel feel. */
 export function IpodPreview({ track }) {
-  const now = track || { title: "Nothing playing", artist: "—", duration: "0:00", coverArt: null, thumbColor: "var(--ipod-graphite)" };
+  const now = track || { title: "Nothing playing", artist: "—", duration: "0:00", coverArt: null, thumbnailUrl: "", thumbColor: "var(--ipod-graphite)" };
   return (
     <div style={{
       borderRadius: "var(--radius-ipod)", padding: 16, minHeight: 420, background: "var(--grad-chrome)",
@@ -19,13 +20,20 @@ export function IpodPreview({ track }) {
           <Icon name="play" size={12} color="var(--text-lcd-muted)" emboss={false} />
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <div style={{
-            width: 42, height: 42, flex: "none", borderRadius: 3, border: "1px solid var(--border-lcd)",
-            background: now.coverArt ? `center/cover no-repeat url(${now.coverArt})` : now.thumbColor,
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            {!now.coverArt && <Icon name="note" size={16} color="rgba(255,255,255,0.9)" emboss={false} />}
-          </div>
+          <ArtworkThumb
+            primarySrc={now.coverArt}
+            fallbackSrc={now.thumbnailUrl}
+            thumbColor={now.thumbColor}
+            alt={`${now.title} cover`}
+            iconSize={16}
+            style={{
+              width: 42,
+              height: 42,
+              flex: "none",
+              borderRadius: 3,
+              border: "1px solid var(--border-lcd)",
+            }}
+          />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: "var(--text-sm)", fontWeight: "var(--weight-bold)", color: "var(--text-lcd-strong)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{now.title}</div>
             <div style={{ fontSize: "var(--text-xs)", color: "var(--text-lcd-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{now.artist}</div>

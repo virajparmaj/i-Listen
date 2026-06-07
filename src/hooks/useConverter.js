@@ -9,8 +9,10 @@ import {
 } from "../data/mockData.js";
 import {
   addJobs,
+  audioUrlForJob,
   cancelJob,
   connectEvents,
+  coverArtUrlForJob,
   createPlaylist,
   helperBaseUrl,
   helperHealth,
@@ -41,8 +43,15 @@ function fmtSize(bytes) {
   return `${mb.toFixed(1)} MB`;
 }
 
-function mapJob(job, index = 0) {
+function assetVersionForJob(job) {
+  return job.updatedAt || job.createdAt || "";
+}
+
+export function mapJob(job, index = 0) {
   const output = outputFor(job.outputOption);
+  const assetVersion = assetVersionForJob(job);
+  const coverArt = job.coverPath ? coverArtUrlForJob(job.id, assetVersion) : null;
+  const audioUrl = job.outputPath ? audioUrlForJob(job.id, assetVersion) : null;
   return {
     id: job.id,
     url: job.url,
@@ -58,6 +67,7 @@ function mapJob(job, index = 0) {
     composer: job.composer,
     producer: "",
     comment: job.comment,
+    thumbnailUrl: job.thumbnailUrl || "",
     playlists: job.playlists || [],
     playlistText: (job.playlists || []).join(", "),
     versionLabel: "",
@@ -71,18 +81,23 @@ function mapJob(job, index = 0) {
     qualityLabel: job.selectedOutput || output.shortLabel,
     compatibility: output.compatibility,
     size: fmtSize(job.sizeBytes),
+    coverPath: job.coverPath,
     outputPath: job.outputPath,
+    audioUrl,
     sourcePath: job.sourcePath,
     sourceCodec: job.sourceCodec,
-    coverArt: null,
+    coverArt,
+    assetVersion,
     progress: job.progress,
     status: job.status,
     warning: job.warning || null,
     error: job.error || null,
+    updatedAt: job.updatedAt,
+    createdAt: job.createdAt,
   };
 }
 
-function mapJobs(jobs = []) {
+export function mapJobs(jobs = []) {
   return jobs.map(mapJob);
 }
 

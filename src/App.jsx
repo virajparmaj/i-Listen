@@ -193,7 +193,14 @@ export default function App() {
             </div>
           </div>
         ) : (
-          <LibraryView tracks={tracks} pattern={pattern} avoidOverwrite={settings.avoidOverwrite} onZip={onZip} onCSV={onCSV} />
+          <LibraryView
+            tracks={tracks}
+            pattern={pattern}
+            avoidOverwrite={settings.avoidOverwrite}
+            onZip={onZip}
+            onCSV={onCSV}
+            helperConnected={helper.connected}
+          />
         )}
       </main>
 

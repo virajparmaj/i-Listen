@@ -7,6 +7,27 @@ function storedToken() {
   return localStorage.getItem(TOKEN_KEY) || "";
 }
 
+export function helperToken() {
+  return storedToken();
+}
+
+function assetUrl(path, version = "") {
+  const token = storedToken();
+  if (!token) return null;
+  const url = new URL(`${helperBaseUrl}${path}`);
+  url.searchParams.set("token", token);
+  if (version) url.searchParams.set("v", version);
+  return url.toString();
+}
+
+export function coverArtUrlForJob(id, version = "") {
+  return assetUrl(`/jobs/${id}/cover`, version);
+}
+
+export function audioUrlForJob(id, version = "") {
+  return assetUrl(`/jobs/${id}/audio`, version);
+}
+
 function setStoredToken(token) {
   if (token) localStorage.setItem(TOKEN_KEY, token);
 }
