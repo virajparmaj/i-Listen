@@ -13,7 +13,7 @@ describe("metadata inference", () => {
     expect(meta.title).toBe("Apocalypse");
     expect(meta.year).toBe("2017");
     expect(meta.album).toBe("2017 - Singles");
-    expect(meta.playlists).toContain("iPod - Cigarettes After Sex");
+    expect(meta.playlists).toEqual([]);
   });
 
   it("uses the uploader to split Title - Artist YouTube Music titles", () => {
@@ -27,7 +27,20 @@ describe("metadata inference", () => {
     expect(meta.title).toBe("Cry");
     expect(meta.year).toBe("2019");
     expect(meta.album).toBe("2019 - Singles");
-    expect(meta.playlists).toContain("iPod - Cigarettes After Sex");
+    expect(meta.playlists).toEqual([]);
+  });
+
+  it("fixes swapped YouTube Music fields using the uploader/title pattern", () => {
+    const meta = inferTrackMetadata({
+      title: "Cry - Cigarettes After Sex",
+      track: "Cigarettes After Sex",
+      artist: "Cry",
+      uploader: "Cigarettes After Sex",
+      upload_date: "20191025",
+    });
+
+    expect(meta.artist).toBe("Cigarettes After Sex");
+    expect(meta.title).toBe("Cry");
   });
 
   it("prefers YouTube Music fields over messy YouTube titles", () => {
@@ -92,7 +105,7 @@ describe("metadata inference", () => {
     expect(meta.artist).toBe("Unknown Artist");
     expect(meta.album).toBe("Singles");
     expect(meta.year).toBe("");
-    expect(meta.playlists).toEqual(["iPod - YouTube Converts"]);
+    expect(meta.playlists).toEqual([]);
   });
 
   it("keeps ambiguous dash titles as Artist - Title without a known artist", () => {
