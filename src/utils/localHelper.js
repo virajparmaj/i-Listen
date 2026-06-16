@@ -144,6 +144,18 @@ export async function ipodStatus() {
   return request("/ipod/status");
 }
 
+export async function parseLibrary(xml) {
+  return request("/library/parse", { method: "POST", body: JSON.stringify({ xml }) });
+}
+
+export async function searchLibraryMatches(tracks) {
+  return request("/library/search", { method: "POST", body: JSON.stringify({ tracks }) });
+}
+
+export async function importLibraryMatches(matches, options = {}) {
+  return request("/library/import", { method: "POST", body: JSON.stringify({ matches, ...options }) });
+}
+
 export async function retagTrack(id) {
   return request(`/jobs/${id}/retag`, { method: "POST", body: "{}" });
 }

@@ -3,7 +3,8 @@ import { Icon } from "./ui/Icon.jsx";
 import { BrandMark } from "./ui/BrandMark.jsx";
 
 export function TopBar({ tab, setTab, onOpenSettings, onOpenLogs, logCount = 0, jobInfo }) {
-  const tabs = ["Convert", "Library", "Sync"];
+  const tabs = ["Convert", "Library", "Sync", "Import"];
+  const labels = { Import: "Convert with XML" };
   return (
     <header className="il-topbar" style={{
       display: "flex", alignItems: "center", gap: 16, padding: "0 20px", height: 56,
@@ -23,7 +24,7 @@ export function TopBar({ tab, setTab, onOpenSettings, onOpenLogs, logCount = 0, 
             background: tab === t ? "var(--grad-select)" : "transparent",
             color: tab === t ? "var(--text-on-accent)" : "var(--text-on-dark-soft)",
             boxShadow: tab === t ? "var(--gloss-top-dark)" : "none",
-          }}>{t}</button>
+          }}>{labels[t] || t}</button>
         ))}
       </nav>
       <div className="il-topbar-actions" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 14 }}>

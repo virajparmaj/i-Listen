@@ -10,6 +10,7 @@ import { IpodPreview } from "./components/IpodPreview.jsx";
 import { ExportBar } from "./components/ExportBar.jsx";
 import { LibraryView } from "./components/LibraryView.jsx";
 import { SyncView } from "./components/SyncView.jsx";
+import { XmlImportView } from "./components/xml/XmlImportView.jsx";
 import { MetadataEditor } from "./components/MetadataEditor.jsx";
 import { CoverArtModal } from "./components/CoverArtModal.jsx";
 import { SettingsModal } from "./components/SettingsModal.jsx";
@@ -214,6 +215,20 @@ export default function App() {
             actions={actions}
             onShowToast={showToast}
             onEdit={setEditTrack}
+          />
+        )}
+
+        {tab === "Import" && (
+          <XmlImportView
+            helper={helper}
+            onLog={actions.pushLog}
+            onImported={(result) => {
+              const count = result?.created?.length || 0;
+              showToast(count
+                ? `Importing ${count} track${count === 1 ? "" : "s"} — converting now. Review and approve in Sync.`
+                : "No new tracks to import.");
+              if (count) setTab("Sync");
+            }}
           />
         )}
       </main>
