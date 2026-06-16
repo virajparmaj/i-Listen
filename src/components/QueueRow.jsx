@@ -68,6 +68,10 @@ export function QueueRow({ track, last, onEdit, onArt, onDownload, onRetry, onRe
             <ProgressBar value={track.progress} showLabel label={`${track.title} conversion progress`} />
             <div style={{ fontFamily: "var(--font-typewriter)", fontSize: "var(--text-xs)", color: "var(--text-secondary)", marginTop: 4 }}>{st.label}</div>
           </>
+        ) : isDone && track.metadataReviewStatus !== "approved" ? (
+          <Badge tone="warning">Needs review</Badge>
+        ) : isDone && track.metadataReviewStatus === "approved" ? (
+          <Badge tone="success">Approved</Badge>
         ) : (
           <Badge tone={st.tone}>{st.label}</Badge>
         )}

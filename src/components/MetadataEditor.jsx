@@ -73,11 +73,12 @@ export function MetadataEditor({ open, track, onClose, onSave, resizeArtwork = t
           <Field label="Year"><Input value={draft.year} onChange={set("year")} /></Field>
           <Field label="Genre"><Select value={draft.genre} onChange={set("genre")} options={genreOpts} style={{ width: "100%" }} /></Field>
           <Field label="Track #"><Input value={draft.track} onChange={set("track")} /></Field>
+          <Field label="Disc #"><Input value={draft.disc} onChange={set("disc")} placeholder="e.g. 1" /></Field>
           <Field label="Composer"><Input value={draft.composer} onChange={set("composer")} /></Field>
           <Field label="Producer"><Input value={draft.producer} onChange={set("producer")} /></Field>
           <Field label="Version label" span={2}><Input value={draft.versionLabel} onChange={set("versionLabel")} placeholder="e.g. Remaster, Radio Edit" /></Field>
           <Field label="Playlists" span={2}>
-            <textarea value={draft.playlistText || (draft.playlists || []).join(", ")} onChange={setPlaylists} rows={2} placeholder="iPod - Chill, iPod - Artist Name" style={{
+            <textarea value={draft.playlistText || (draft.playlists || []).join(", ")} onChange={setPlaylists} rows={2} placeholder="Gym, Late Night, Hindi Mix" style={{
               resize: "vertical", padding: "8px 12px", borderRadius: "var(--radius-sm)",
               border: "1px solid var(--border-hairline)", background: "var(--surface-panel)",
               boxShadow: "var(--shadow-inset)", fontFamily: "var(--font-ui)", fontSize: "var(--text-body)",

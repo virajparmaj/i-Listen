@@ -90,6 +90,13 @@ export async function updateJob(id, patch) {
   });
 }
 
+export async function organizeJobs(items) {
+  return request("/jobs/organize", {
+    method: "POST",
+    body: JSON.stringify({ items }),
+  });
+}
+
 export async function startJob(id) {
   return request(`/jobs/${id}/start`, { method: "POST", body: "{}" });
 }
@@ -108,6 +115,41 @@ export async function removeJob(id) {
 
 export async function createPlaylist() {
   return request("/exports/playlist", { method: "POST", body: "{}" });
+}
+
+export async function revealExports() {
+  return request("/exports/reveal", { method: "POST", body: "{}" });
+}
+
+export async function handoffToIpod(ids = null) {
+  return request("/ipod/handoff", {
+    method: "POST",
+    body: JSON.stringify(Array.isArray(ids) ? { ids } : {}),
+  });
+}
+
+export async function cleanupAppleMusic() {
+  return request("/applemusic/cleanup", { method: "POST", body: "{}" });
+}
+
+export async function ipodDevices() {
+  return request("/ipod/devices");
+}
+
+export async function selectIpodVolume(path) {
+  return request("/ipod/select", { method: "POST", body: JSON.stringify({ path }) });
+}
+
+export async function ipodStatus() {
+  return request("/ipod/status");
+}
+
+export async function retagTrack(id) {
+  return request(`/jobs/${id}/retag`, { method: "POST", body: "{}" });
+}
+
+export async function uploadArtwork(id, dataUrl) {
+  return request(`/jobs/${id}/artwork`, { method: "POST", body: JSON.stringify({ dataUrl }) });
 }
 
 export function connectEvents(onMessage, onError) {

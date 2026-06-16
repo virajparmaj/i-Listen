@@ -14,15 +14,22 @@ import {
   connectEvents,
   coverArtUrlForJob,
   createPlaylist,
+  cleanupAppleMusic,
+  handoffToIpod,
   helperBaseUrl,
   helperHealth,
   helperSetupCommand,
+  ipodDevices,
   openProject,
+  organizeJobs,
   pairHelper,
   removeJob,
+  retagTrack,
   retryJob,
+  selectIpodVolume,
   startJob,
   updateJob,
+  uploadArtwork,
 } from "../utils/localHelper.js";
 
 function ts() {
@@ -64,6 +71,7 @@ export function mapJob(job, index = 0) {
     year: job.year,
     genre: job.genre,
     track: job.track,
+    disc: job.disc || "",
     composer: job.composer,
     producer: "",
     comment: job.comment,
@@ -82,6 +90,7 @@ export function mapJob(job, index = 0) {
     compatibility: output.compatibility,
     size: fmtSize(job.sizeBytes),
     coverPath: job.coverPath,
+    customCoverPath: job.customCoverPath || "",
     outputPath: job.outputPath,
     audioUrl,
     sourcePath: job.sourcePath,
@@ -90,6 +99,17 @@ export function mapJob(job, index = 0) {
     assetVersion,
     progress: job.progress,
     status: job.status,
+    conversionStatus: job.conversionStatus || "",
+    metadataStatus: job.metadataStatus || "",
+    artworkStatus: job.artworkStatus || "",
+    exportStatus: job.exportStatus || "",
+    appleMusicImportStatus: job.appleMusicImportStatus || "pending",
+    appleMusicPlaylistStatus: job.appleMusicPlaylistStatus || "pending",
+    readyForFinderSync: Number(job.readyForFinderSync || 0),
+    syncState: job.syncState || "",
+    sourceBatch: job.sourceBatch || "",
+    metadataReviewStatus: job.metadataReviewStatus || "pending",
+    lastError: job.lastError || null,
     warning: job.warning || null,
     error: job.error || null,
     updatedAt: job.updatedAt,
@@ -108,6 +128,15 @@ export function useConverter() {
   ]);
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [globalCover, setGlobalCover] = useState(null);
+  const [ipod, setIpod] = useState({
+    checked: false,
+    connected: false,
+    device: { connected: false },
+    mounted: [],
+    usb: [],
+    selectedPath: "",
+    error: null,
+  });
   const [helper, setHelper] = useState({
     checked: false,
     connected: false,
@@ -250,13 +279,25 @@ export function useConverter() {
   const updateTrack = useCallback(async (id, patch) => {
     setTracks((prev) => prev.map((track) => (track.id === id ? { ...track, ...patch } : track)));
     if (!helperRef.current.connected) return;
-    let nextPatch = { ...patch };
+
+    // Persist a freshly uploaded custom cover (a data URL) to disk first so the
+    // metadata re-tag below embeds it into the exported file in a single pass.
+    if (typeof patch.coverArt === "string" && patch.coverArt.startsWith("data:")) {
+      try {
+        await uploadArtwork(id, patch.coverArt).then(refreshFromResult);
+      } catch (error) {
+        pushLog(`Could not save custom artwork: ${error.message}`, "warn", "Artwork:");
+      }
+    }
+
+    const nextPatch = { ...patch };
+    delete nextPatch.coverArt;
     if (patch.preset && !patch.outputOption) {
       nextPatch.outputOption = presetFor(patch.preset).outputOption;
     }
     const result = await updateJob(id, nextPatch);
     refreshFromResult(result);
-  }, [refreshFromResult]);
+  }, [pushLog, refreshFromResult]);
 
   const applyToAll = useCallback(async (patch) => {
     setTracks((prev) => prev.map((track) => {
@@ -296,11 +337,24 @@ export function useConverter() {
     pushLog("Queue reset.", null, "Queue:");
   }, [pushLog]);
 
-  const applyGlobalCover = useCallback((dataUrl) => {
+  const applyGlobalCover = useCallback(async (dataUrl) => {
     setGlobalCover(dataUrl);
     setTracks((prev) => prev.map((track) => ({ ...track, coverArt: dataUrl })));
-    pushLog("Applied cover art in the UI. The local helper uses YouTube thumbnails for embedded artwork in v1.", "warn", "Artwork:");
-  }, [pushLog]);
+    if (!helperRef.current.connected) {
+      pushLog("Applied cover art in the UI. Connect the local helper to embed it into files.", "warn", "Artwork:");
+      return;
+    }
+    const targets = tracksRef.current;
+    pushLog(`Embedding cover art into ${targets.length} track${targets.length === 1 ? "" : "s"}…`, null, "Artwork:");
+    for (const track of targets) {
+      try {
+        await uploadArtwork(track.id, dataUrl).then(refreshFromResult);
+        if (track.status === "complete") await retagTrack(track.id);
+      } catch (error) {
+        pushLog(`Artwork failed for ${track.title}: ${error.message}`, "warn", "Artwork:");
+      }
+    }
+  }, [pushLog, refreshFromResult]);
 
   const updateSettings = useCallback((patch) => {
     setSettings((prev) => ({ ...prev, ...patch }));
@@ -313,6 +367,71 @@ export function useConverter() {
     return result.playlist;
   }, [refreshFromResult]);
 
+  const approveTracks = useCallback(async (items) => {
+    if (!helperRef.current.connected) throw new Error("Local helper is not connected.");
+    const result = await organizeJobs(items);
+    refreshFromResult(result);
+    return result;
+  }, [refreshFromResult]);
+
+  const approveTrack = useCallback(async (track) => {
+    return approveTracks([{
+      id: track.id,
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      albumArtist: track.albumArtist,
+      year: track.year,
+      genre: track.genre,
+      track: track.track,
+      disc: track.disc,
+      composer: track.composer,
+      comment: track.comment,
+      playlists: track.playlists || [],
+    }]);
+  }, [approveTracks]);
+
+  const handoffToAppleMusic = useCallback(async (ids = null) => {
+    if (!helperRef.current.connected) throw new Error("Local helper is not connected.");
+    const result = await handoffToIpod(ids);
+    refreshFromResult(result);
+    return result;
+  }, [refreshFromResult]);
+
+  const cleanupMusicPlaylists = useCallback(async () => {
+    if (!helperRef.current.connected) throw new Error("Local helper is not connected.");
+    const result = await cleanupAppleMusic();
+    refreshFromResult(result);
+    return result;
+  }, [refreshFromResult]);
+
+  const refreshIpod = useCallback(async () => {
+    if (!helperRef.current.connected) return null;
+    try {
+      const result = await ipodDevices();
+      setIpod({
+        checked: true,
+        connected: result.connected,
+        device: result.device || { connected: false },
+        mounted: result.mounted || [],
+        usb: result.usb || [],
+        selectedPath: result.selectedPath || "",
+        error: null,
+      });
+      return result;
+    } catch (error) {
+      setIpod((prev) => ({ ...prev, checked: true, error: error.message }));
+      return null;
+    }
+  }, []);
+
+  const selectIpod = useCallback(async (path) => {
+    const result = await selectIpodVolume(path);
+    refreshFromResult(result);
+    await refreshIpod();
+    return result;
+  }, [refreshFromResult, refreshIpod]);
+
   return {
     tracks,
     logs,
@@ -320,10 +439,12 @@ export function useConverter() {
     isProcessing: tracks.some((track) => IN_FLIGHT.includes(track.status)),
     globalCover,
     helper,
+    ipod,
     actions: {
       start, pause, addFromLinks, updateTrack, applyToAll, removeTrack,
       retry, clearCompleted, resetAll, applyGlobalCover, updateSettings,
       setGlobalCover, pushLog, exportPlaylist,
+      approveTrack, approveTracks, handoffToAppleMusic, cleanupMusicPlaylists, refreshIpod, selectIpod,
     },
   };
 }

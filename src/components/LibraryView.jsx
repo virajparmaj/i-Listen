@@ -96,23 +96,24 @@ function FolderTree({ tracks, pattern, avoidOverwrite }) {
 function PlaylistTree({ tracks }) {
   const groups = {};
   tracks.forEach((track) => {
-    const names = track.playlists?.length ? track.playlists : ["iPod - YouTube Converts"];
+    const names = (track.playlists || []).filter((name) => !/^ipod\s*-/i.test(String(name || "").trim()));
     names.forEach((name) => {
       groups[name] = groups[name] || [];
       groups[name].push(track);
     });
   });
+  const entries = Object.entries(groups);
 
   return (
     <div style={{ fontFamily: "var(--font-typewriter)", fontSize: "var(--text-sm)", color: "var(--text-secondary)", lineHeight: 1.7 }}>
-      {Object.entries(groups).map(([name, items]) => (
+      {entries.length ? entries.map(([name, items]) => (
         <div key={name}>
           <div style={{ color: "var(--text-primary)" }}>{name}.m3u</div>
           {items.map((track) => (
             <div key={track.id} style={{ paddingLeft: 16 }}>{track.artist} - {track.title}</div>
           ))}
         </div>
-      ))}
+      )) : <div>No custom playlists assigned.</div>}
     </div>
   );
 }
@@ -282,7 +283,7 @@ export function LibraryView({ tracks, pattern, avoidOverwrite = true, locked = f
         </Card>
         <Card>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <Button variant="primary" fullWidth disabled={!done.length || locked} iconLeft={<Icon name="zip" size={14} color="var(--text-on-accent)" emboss={false} />} onClick={onZip}>Create iPod playlist</Button>
+            <Button variant="secondary" fullWidth disabled={!done.length || locked} iconLeft={<Icon name="zip" size={14} emboss={false} />} onClick={onZip}>Export M3U playlist files</Button>
             <Button variant="ghost" fullWidth iconLeft={<Icon name="csv" size={14} />} onClick={onCSV} disabled={!done.length || locked}>Export CSV report</Button>
           </div>
         </Card>

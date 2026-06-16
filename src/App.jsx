@@ -9,6 +9,7 @@ import { LogsPanel } from "./components/LogsPanel.jsx";
 import { IpodPreview } from "./components/IpodPreview.jsx";
 import { ExportBar } from "./components/ExportBar.jsx";
 import { LibraryView } from "./components/LibraryView.jsx";
+import { SyncView } from "./components/SyncView.jsx";
 import { MetadataEditor } from "./components/MetadataEditor.jsx";
 import { CoverArtModal } from "./components/CoverArtModal.jsx";
 import { SettingsModal } from "./components/SettingsModal.jsx";
@@ -31,7 +32,7 @@ function Toast({ msg }) {
 }
 
 export default function App() {
-  const { tracks, logs, settings, globalCover, helper, actions } = useConverter();
+  const { tracks, logs, settings, globalCover, helper, ipod, actions } = useConverter();
   const [tab, setTab] = React.useState("Convert");
   const [selectedIds, setSelectedIds] = React.useState(() => new Set());
 
@@ -123,7 +124,7 @@ export default function App() {
       <LocalHelperPanel helper={helper} />
 
       <main className="il-app-main">
-        {tab === "Convert" ? (
+        {tab === "Convert" && (
           <div className="il-convert-grid">
             <div className="il-convert-main">
               <PastePanel
@@ -192,7 +193,9 @@ export default function App() {
               </div>
             </div>
           </div>
-        ) : (
+        )}
+
+        {tab === "Library" && (
           <LibraryView
             tracks={tracks}
             pattern={pattern}
@@ -200,6 +203,17 @@ export default function App() {
             onZip={onZip}
             onCSV={onCSV}
             helperConnected={helper.connected}
+          />
+        )}
+
+        {tab === "Sync" && (
+          <SyncView
+            tracks={tracks}
+            helper={helper}
+            ipod={ipod}
+            actions={actions}
+            onShowToast={showToast}
+            onEdit={setEditTrack}
           />
         )}
       </main>

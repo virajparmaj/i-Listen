@@ -3,7 +3,7 @@ import { Icon } from "./ui/Icon.jsx";
 import { BrandMark } from "./ui/BrandMark.jsx";
 
 export function TopBar({ tab, setTab, onOpenSettings, onOpenLogs, logCount = 0, jobInfo }) {
-  const tabs = ["Convert", "Library"];
+  const tabs = ["Convert", "Library", "Sync"];
   return (
     <header className="il-topbar" style={{
       display: "flex", alignItems: "center", gap: 16, padding: "0 20px", height: 56,
