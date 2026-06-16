@@ -47,11 +47,11 @@ describe("smart output planning", () => {
       id: "job-1",
       status: "complete",
       outputPath,
-      playlists: ["iPod - Chill", "iPod - Artist"],
+      playlists: ["Chill", "iPod - Artist", "Hindi Mix"],
     }]);
 
     expect(result.count).toBe(1);
-    expect(result.playlists.map((item) => item.name)).toEqual(["iPod - Chill", "iPod - Artist"]);
+    expect(result.playlists.map((item) => item.name)).toEqual(["Chill", "Hindi Mix"]);
     expect(result.all.path.endsWith("iListen Export.m3u")).toBe(true);
   });
 });

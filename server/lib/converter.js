@@ -3,12 +3,12 @@ import { existsSync } from "node:fs";
 import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import { addLog, getJob, listJobs, updateJob } from "./db.js";
-import { inferTrackMetadata, normalizePlaylists } from "./metadata.js";
+import { customPlaylists, inferTrackMetadata } from "./metadata.js";
 import { ensureParent, fileExists, relativePlaylistPath, sanitizePathSegment } from "./paths.js";
 
 const COMPLETE_CODECS = new Set(["aac", "alac", "mp3"]);
 
-function runProcess(command, args, options = {}) {
+export function runProcess(command, args, options = {}) {
   const { cwd, signal, onStdout, onStderr } = options;
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { cwd, signal, stdio: ["ignore", "pipe", "pipe"] });
@@ -33,7 +33,7 @@ function runProcess(command, args, options = {}) {
   });
 }
 
-function metadataArgs(job) {
+export function metadataArgs(job) {
   const fields = [
     ["title", job.title],
     ["artist", job.artist],
@@ -42,6 +42,7 @@ function metadataArgs(job) {
     ["date", job.year],
     ["genre", job.genre],
     ["track", job.track],
+    ["disc", job.disc],
     ["composer", job.composer],
     ["comment", job.comment],
   ];
@@ -80,7 +81,7 @@ export function chooseOutputPlan(job, probe) {
 
 function uniqueOutputPath(project, job, plan) {
   const artist = sanitizePathSegment(job.artist, "Unknown Artist");
-  const album = sanitizePathSegment(job.album, "YouTube imports");
+  const album = sanitizePathSegment(job.album, "Unknown Album");
   const track = String(job.track || "1").padStart(2, "0");
   const stem = sanitizePathSegment(`${track} - ${job.title}`, `Track ${track}`);
   const ext = outputExtension(plan);
@@ -119,7 +120,7 @@ function buildFfmpegArgs({ inputPath, coverPath, outputPath, job, plan }) {
   return args;
 }
 
-async function probeMedia(ffprobe, path) {
+export async function probeMedia(ffprobe, path) {
   const { stdout } = await runProcess(ffprobe, [
     "-v", "error",
     "-print_format", "json",
@@ -128,6 +129,39 @@ async function probeMedia(ffprobe, path) {
     path,
   ]);
   return JSON.parse(stdout);
+}
+
+function readTag(tags, name) {
+  if (!tags) return "";
+  const key = Object.keys(tags).find((k) => k.toLowerCase() === name);
+  return key ? String(tags[key] ?? "").trim() : "";
+}
+
+/**
+ * Validate an exported audio file is iPod/Apple-Music ready.
+ * @returns {{ ok: boolean, error?: string, durationSec?: number, metadataStatus?: string, artworkStatus?: string }}
+ */
+export function validateExport({ outputPath, outputProbe, outputAudio, coverPath, job }) {
+  if (!existsSync(outputPath)) {
+    return { ok: false, error: "Export missing: no output file was produced." };
+  }
+  const codec = String(outputAudio?.codec_name || "").toLowerCase();
+  if (!COMPLETE_CODECS.has(codec)) {
+    return { ok: false, error: `Unsupported output codec: ${outputAudio?.codec_name || "unknown"}` };
+  }
+  const durationSec = Number(outputProbe.format?.duration || job?.durationSec || 0);
+  if (!(durationSec > 0)) {
+    return { ok: false, error: "Validation failed: exported file reports zero duration." };
+  }
+  const tags = outputProbe.format?.tags || {};
+  const metadataReady = Boolean(readTag(tags, "title") && readTag(tags, "artist") && readTag(tags, "album"));
+  const hasArtworkStream = (outputProbe.streams || []).some((stream) => stream.codec_type === "video");
+  const artworkStatus = hasArtworkStream
+    ? "embedded"
+    : coverPath && existsSync(coverPath)
+      ? "external"
+      : "missing";
+  return { ok: true, durationSec, metadataStatus: metadataReady ? "complete" : "incomplete", artworkStatus };
 }
 
 async function downloadThumbnail(url, outputPath) {
@@ -191,10 +225,17 @@ export class JobRunner {
       await this.runJob(id, controller.signal);
     } catch (error) {
       if (controller.signal.aborted) {
-        this.patch(id, { status: "canceled", progress: 0, error: "Canceled by user." });
+        this.patch(id, { status: "canceled", conversionStatus: "", progress: 0, error: "Canceled by user." });
         this.log(`${id} canceled.`, "warn", "Cancel:");
       } else {
-        this.patch(id, { status: "failed", progress: 0, error: error.message });
+        this.patch(id, {
+          status: "failed",
+          conversionStatus: "failed",
+          exportStatus: "invalid",
+          progress: 0,
+          error: error.message,
+          lastError: error.message,
+        });
         this.log(error.message, "err", "Failed:");
       }
     } finally {
@@ -212,7 +253,7 @@ export class JobRunner {
   }
 
   async runJob(id, signal) {
-    let job = this.patch(id, { status: "analyzing", progress: 8, error: "", warning: "" });
+    let job = this.patch(id, { status: "analyzing", conversionStatus: "converting", progress: 8, error: "", lastError: "", warning: "" });
     this.log(`${job.url}`, null, "Analyze:");
 
     const { stdout: infoText } = await runProcess(this.tools.ytdlp.path, [
@@ -226,11 +267,11 @@ export class JobRunner {
     job = this.patch(id, {
       title: job.title.startsWith("YouTube link") ? inferred.title : job.title,
       artist: job.artist === "Unknown Artist" ? inferred.artist : job.artist,
-      album: job.album === "YouTube imports" ? inferred.album : job.album,
+      album: ["Unknown Album", "YouTube imports"].includes(job.album) ? inferred.album : job.album,
       albumArtist: job.albumArtist === "Unknown Artist" ? inferred.albumArtist : job.albumArtist,
       year: job.year || inferred.year,
       comment: job.comment || inferred.comment,
-      playlists: job.playlists?.length ? normalizePlaylists([...job.playlists, ...inferred.playlists]) : inferred.playlists,
+      playlists: job.playlists?.length ? customPlaylists([...job.playlists, ...inferred.playlists]) : inferred.playlists,
       thumbnailUrl: info.thumbnail || "",
       durationSec: info.duration || null,
       status: "downloading",
@@ -259,10 +300,15 @@ export class JobRunner {
     job = this.patch(id, { sourcePath, status: "converting", progress: 42 });
 
     let coverPath = "";
-    try {
-      coverPath = await downloadThumbnail(job.thumbnailUrl, join(this.project.artworkDir, id)) || "";
-    } catch (error) {
-      this.log(`Artwork skipped: ${error.message}`, "warn", "Artwork:");
+    if (job.customCoverPath && existsSync(job.customCoverPath)) {
+      coverPath = job.customCoverPath;
+      this.log("Using custom uploaded artwork.", "ok", "Artwork:");
+    } else {
+      try {
+        coverPath = await downloadThumbnail(job.thumbnailUrl, join(this.project.artworkDir, id)) || "";
+      } catch (error) {
+        this.log(`Artwork skipped: ${error.message}`, "warn", "Artwork:");
+      }
     }
 
     const sourceProbe = await probeMedia(this.tools.ffprobe.path, sourcePath);
@@ -290,16 +336,26 @@ export class JobRunner {
     const outputProbe = await probeMedia(this.tools.ffprobe.path, outputPath);
     const outputAudio = outputProbe.streams.find((stream) => stream.codec_type === "audio") || {};
     const outputStats = await stat(outputPath);
-    if (!COMPLETE_CODECS.has(String(outputAudio.codec_name || "").toLowerCase())) {
-      throw new Error(`ffprobe found unsupported output codec: ${outputAudio.codec_name || "unknown"}`);
-    }
+
+    const validation = validateExport({ outputPath, outputProbe, outputAudio, coverPath, job });
+    if (!validation.ok) throw new Error(validation.error);
 
     this.patch(id, {
       status: "complete",
+      conversionStatus: "complete",
       progress: 100,
-      durationSec: Number(outputProbe.format?.duration || job.durationSec || 0),
+      durationSec: validation.durationSec,
       sizeBytes: outputStats.size,
+      exportStatus: "validated",
+      metadataStatus: validation.metadataStatus,
+      artworkStatus: validation.artworkStatus,
+      metadataReviewStatus: "needs_review",
+      readyForFinderSync: 0,
+      syncState: "",
+      appleMusicImportStatus: "pending",
+      appleMusicPlaylistStatus: "pending",
       error: "",
+      lastError: "",
       warning: job.outputOption === "best-youtube" ? "Best available from YouTube; not original studio/master quality." : "",
     });
     this.log(`${relativePlaylistPath(outputPath)} ready for Apple Music import.`, "ok", "Complete:");
@@ -320,7 +376,7 @@ export async function writePlaylists(project, jobs) {
   const groups = new Map();
 
   done.forEach((job) => {
-    const names = normalizePlaylists(job.playlists?.length ? job.playlists : ["iPod - YouTube Converts"]);
+    const names = customPlaylists(job.playlists || []);
     names.forEach((name) => {
       if (!groups.has(name)) groups.set(name, []);
       groups.get(name).push(job);
