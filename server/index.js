@@ -5,8 +5,11 @@ import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { addLog, createJobs, getJob, getState, listJobs, listLogs, openDatabase, removeJob, setState, updateJob } from "./lib/db.js";
+import { addLog, createJobs, createJobsFromMatches, existingTrackKeys, getJob, getState, listJobs, listLogs, openDatabase, removeJob, setState, trackKey, updateJob } from "./lib/db.js";
 import { JobRunner, writePlaylists } from "./lib/converter.js";
+import { parseLibraryXml } from "./lib/libraryXml.js";
+import { searchTracks } from "./lib/youtubeSearch.js";
+import { isYoutubeUrl } from "./lib/youtube.js";
 import { retagExport } from "./lib/retag.js";
 import { cleanupStaleIlistenPlaylists, classifyOsascriptError, handoffToAppleMusic, ILISTEN_FOLDER, MASTER_PLAYLIST } from "./lib/appleMusic.js";
 import { detectIpods, verifyIpodVolume } from "./lib/ipod.js";
@@ -324,6 +327,42 @@ async function persistArtwork(project, id, dataUrl) {
   return { ok: true, path };
 }
 
+/**
+ * Start a list of jobs in the background through a small concurrency pool so an
+ * XML import does not spawn dozens of yt-dlp/ffmpeg processes at once. Failures
+ * are logged; the per-job runner already records them on the job itself.
+ */
+function startJobsInBackground(state, ids, limit = 2) {
+  const queue = [...ids];
+  const worker = async () => {
+    while (queue.length) {
+      const id = queue.shift();
+      try {
+        await state.runner.startJob(id);
+      } catch (error) {
+        addLog(state.db, error.message, "err", "Failed:");
+        emit(state, { type: "logs", logs: listLogs(state.db) });
+      }
+    }
+  };
+  const workers = Array.from({ length: Math.min(limit, ids.length) }, () => worker());
+  Promise.all(workers).catch(() => {});
+}
+
+/**
+ * Shape a parsed library for the client: ordered playlists plus a track catalog
+ * annotated with whether each song is already in the local database.
+ */
+function libraryForClient(db, library) {
+  const existing = existingTrackKeys(db);
+  const tracks = Object.values(library.tracksById).map((track) => ({
+    ...track,
+    existing: existing.has(trackKey(track.artist, track.title)),
+  }));
+  const tracksById = Object.fromEntries(tracks.map((track) => [String(track.id), track]));
+  return { playlists: library.playlists, tracksById };
+}
+
 export async function route(req, res, state, allowedOrigins) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   if (!isAllowedOrigin(req.headers.origin, allowedOrigins)) {
@@ -413,6 +452,67 @@ export async function route(req, res, state, allowedOrigins) {
     if (rejected.length) addLog(state.db, `${rejected.length} non-YouTube link${rejected.length === 1 ? "" : "s"} rejected.`, "warn", "Queue:");
     emit(state, { type: "jobs", jobs: result.jobs, logs: listLogs(state.db) });
     send(res, req, allowedOrigins, 200, { ...result, rejected });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/library/parse") {
+    const body = await readJson(req);
+    let library;
+    try {
+      library = parseLibraryXml(body.xml);
+    } catch (error) {
+      send(res, req, allowedOrigins, 400, { error: error.message });
+      return;
+    }
+    const shaped = libraryForClient(state.db, library);
+    addLog(state.db, `Parsed library: ${shaped.playlists.length} playlist${shaped.playlists.length === 1 ? "" : "s"}, ${Object.keys(shaped.tracksById).length} track${Object.keys(shaped.tracksById).length === 1 ? "" : "s"}.`, "ok", "Import:");
+    emit(state, { type: "logs", logs: listLogs(state.db) });
+    send(res, req, allowedOrigins, 200, { ...shaped, logs: listLogs(state.db) });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/library/search") {
+    if (!state.tools?.ytdlp?.ok) {
+      send(res, req, allowedOrigins, 409, { error: "yt-dlp is required to search YouTube." });
+      return;
+    }
+    const body = await readJson(req);
+    const tracks = Array.isArray(body.tracks) ? body.tracks : [];
+    if (!tracks.length) {
+      send(res, req, allowedOrigins, 400, { error: "Select one or more tracks to search for." });
+      return;
+    }
+    const search = state.searchTracks || searchTracks;
+    const results = await search(tracks, {
+      ytdlpPath: state.tools.ytdlp.path,
+      onProgress: ({ done, total }) => emit(state, { type: "library-search", done, total }),
+    });
+    send(res, req, allowedOrigins, 200, { results });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/library/import") {
+    const body = await readJson(req);
+    const matches = (Array.isArray(body.matches) ? body.matches : [])
+      .filter((match) => isYoutubeUrl(match?.youtubeUrl));
+    if (!matches.length) {
+      send(res, req, allowedOrigins, 400, { error: "Provide one or more approved matches with valid YouTube links." });
+      return;
+    }
+
+    const sourceBatch = `xml-import-${Date.now()}`;
+    const result = createJobsFromMatches(state.db, matches, {
+      outputOption: body.outputOption || "best-youtube",
+      sourceBatch,
+    });
+    addLog(state.db, `Imported ${result.created.length} track${result.created.length === 1 ? "" : "s"} from Apple Music library.${result.skipped.length ? ` ${result.skipped.length} skipped (already queued).` : ""}`, "ok", "Import:");
+    emit(state, { type: "jobs", jobs: result.jobs, logs: listLogs(state.db) });
+
+    const autoStart = body.autoStart !== false;
+    if (autoStart && state.runner && result.created.length) {
+      startJobsInBackground(state, result.created.map((job) => job.id), 2);
+    }
+    send(res, req, allowedOrigins, 200, { ...result, sourceBatch, autoStarted: autoStart });
     return;
   }
 

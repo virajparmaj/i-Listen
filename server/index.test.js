@@ -385,3 +385,106 @@ describe("iPod sync endpoints", () => {
     expect(response.json().job.customCoverPath).toMatch(/-custom\.png$/);
   });
 });
+
+describe("Apple Music library import endpoints", () => {
+  const LIBRARY_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Tracks</key>
+  <dict>
+    <key>101</key>
+    <dict><key>Track ID</key><integer>101</integer><key>Name</key><string>Apocalypse</string><key>Artist</key><string>Cigarettes After Sex</string><key>Total Time</key><integer>290000</integer></dict>
+  </dict>
+  <key>Playlists</key>
+  <array>
+    <dict><key>Name</key><string>Chill</string><key>Playlist Items</key><array><dict><key>Track ID</key><integer>101</integer></dict></array></dict>
+  </array>
+</dict>
+</plist>`;
+
+  it("parses an uploaded library and flags tracks already in the database", async () => {
+    const { state } = createState();
+    const existing = createJobs(state.db, ["https://youtube.com/watch?v=dup"]).created[0];
+    updateJob(state.db, existing.id, { title: "Apocalypse", artist: "Cigarettes After Sex" });
+
+    const response = await request(state, {
+      method: "POST",
+      url: "/library/parse?token=test-token",
+      body: JSON.stringify({ xml: LIBRARY_XML }),
+    });
+
+    expect(response.res.statusCode).toBe(200);
+    const data = response.json();
+    expect(data.playlists).toHaveLength(1);
+    expect(data.playlists[0]).toMatchObject({ name: "Chill", trackCount: 1 });
+    expect(data.tracksById["101"]).toMatchObject({ title: "Apocalypse", existing: true });
+  });
+
+  it("rejects a file that is not a library export", async () => {
+    const { state } = createState();
+    const response = await request(state, {
+      method: "POST",
+      url: "/library/parse?token=test-token",
+      body: JSON.stringify({ xml: "not a plist" }),
+    });
+    expect(response.res.statusCode).toBe(400);
+  });
+
+  it("searches selected tracks through an injectable search implementation", async () => {
+    const { state } = createState();
+    state.searchTracks = async (tracks) =>
+      tracks.map((track) => ({ id: track.id, query: track.title, candidates: [], best: null, flagged: true }));
+
+    const response = await request(state, {
+      method: "POST",
+      url: "/library/search?token=test-token",
+      body: JSON.stringify({ tracks: [{ id: 101, title: "Apocalypse", artist: "Cigarettes After Sex" }] }),
+    });
+
+    expect(response.res.statusCode).toBe(200);
+    expect(response.json().results[0]).toMatchObject({ id: 101, query: "Apocalypse" });
+  });
+
+  it("imports approved matches as jobs seeded with clean metadata and playlists", async () => {
+    const { state } = createState();
+    const response = await request(state, {
+      method: "POST",
+      url: "/library/import?token=test-token",
+      body: JSON.stringify({
+        autoStart: false,
+        matches: [
+          {
+            youtubeUrl: "https://www.youtube.com/watch?v=sElE_BfQ67s",
+            metadata: { title: "Apocalypse", artist: "Cigarettes After Sex", album: "Cigarettes After Sex", year: "2017", track: "4" },
+            playlists: ["Chill"],
+          },
+        ],
+      }),
+    });
+
+    expect(response.res.statusCode).toBe(200);
+    const data = response.json();
+    expect(data.created).toHaveLength(1);
+    expect(data.created[0]).toMatchObject({
+      title: "Apocalypse",
+      artist: "Cigarettes After Sex",
+      album: "Cigarettes After Sex",
+      year: "2017",
+      track: "4",
+      playlists: ["Chill"],
+      status: "queued",
+    });
+    expect(data.sourceBatch).toMatch(/^xml-import-/);
+  });
+
+  it("rejects an import with no valid YouTube links", async () => {
+    const { state } = createState();
+    const response = await request(state, {
+      method: "POST",
+      url: "/library/import?token=test-token",
+      body: JSON.stringify({ matches: [{ youtubeUrl: "https://example.com/not-youtube" }] }),
+    });
+    expect(response.res.statusCode).toBe(400);
+  });
+});

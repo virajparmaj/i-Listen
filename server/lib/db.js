@@ -264,6 +264,59 @@ export function createJobs(db, urls, outputOption = "best-youtube") {
   return { created, skipped, jobs: listJobs(db) };
 }
 
+/**
+ * Create jobs from approved Apple Music → YouTube matches, seeding each job with
+ * the clean library metadata and its playlist assignment(s). The conversion
+ * pipeline only overwrites metadata fields that are still placeholders, so these
+ * seeded values win over anything inferred from YouTube. Dedups by URL.
+ * @param {object} db
+ * @param {Array<{ youtubeUrl: string, metadata?: object, playlists?: string[] }>} matches
+ * @param {{ outputOption?: string, sourceBatch?: string }} [options]
+ * @returns {{ created: object[], skipped: string[], jobs: object[] }}
+ */
+export function createJobsFromMatches(db, matches, { outputOption = "best-youtube", sourceBatch = "" } = {}) {
+  const count = db.prepare("SELECT COUNT(*) AS count FROM jobs").get().count;
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO jobs (
+      id, url, status, progress, title, artist, album, album_artist, year, genre,
+      track, disc, composer, comment, output_option, playlists, source_batch,
+      metadata_review_status, created_at, updated_at
+    ) VALUES (?, ?, 'queued', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+  `);
+
+  const created = [];
+  const skipped = [];
+  (Array.isArray(matches) ? matches : []).forEach((match, index) => {
+    const url = String(match?.youtubeUrl || "").trim();
+    if (!url) {
+      skipped.push(url);
+      return;
+    }
+    const meta = match.metadata || {};
+    const position = String(count + index + 1);
+    const artist = String(meta.artist || "").trim() || "Unknown Artist";
+    const title = String(meta.title || "").trim() || `YouTube link ${position}`;
+    const album = String(meta.album || "").trim() || "Unknown Album";
+    const albumArtist = String(meta.albumArtist || "").trim() || artist;
+    const track = String(meta.track ?? "").trim() || position;
+    const comment = String(meta.comment || "").trim()
+      || "Source=YouTube via Apple Music library import; best available from YouTube.";
+    const playlists = JSON.stringify(customPlaylists(match.playlists || []));
+    const createdAt = now();
+
+    const result = insert.run(
+      randomUUID(), url, title, artist, album, albumArtist,
+      String(meta.year || ""), String(meta.genre || ""), track, String(meta.disc || ""),
+      String(meta.composer || ""), comment, outputOption, playlists, sourceBatch, createdAt, createdAt
+    );
+
+    if (result.changes) created.push(db.prepare("SELECT * FROM jobs WHERE url = ?").get(url));
+    else skipped.push(url);
+  });
+
+  return { created: created.map(jobFromRow), skipped, jobs: listJobs(db) };
+}
+
 export function updateJob(db, id, patch) {
   const entries = Object.entries(patch).filter(([key]) => JOB_FIELDS[key]);
   if (!entries.length) return getJob(db, id);
@@ -284,6 +337,16 @@ export function removeJob(db, id) {
   const job = getJob(db, id);
   db.prepare("DELETE FROM jobs WHERE id = ?").run(id);
   return job;
+}
+
+/** Normalized identity for a track, used to dedup library imports by song. */
+export function trackKey(artist, title) {
+  return `${String(artist || "").trim().toLowerCase()} ${String(title || "").trim().toLowerCase()}`;
+}
+
+/** Set of `trackKey`s for every job already in the database. */
+export function existingTrackKeys(db) {
+  return new Set(db.prepare("SELECT artist, title FROM jobs").all().map((row) => trackKey(row.artist, row.title)));
 }
 
 export function addLog(db, msg, kind = null, label = null, category = "general") {
