@@ -15,8 +15,9 @@ The browser UI can be hosted, but conversion runs on your Mac through `http://12
 - Keep MP3 V0 and AAC 256 as advanced output options.
 - Embed metadata and YouTube thumbnail artwork with FFmpeg.
 - Validate converted files with `ffprobe`.
-- Write `.m3u` playlist/export handoffs for Apple Music/Finder sync.
-- Guess clean metadata from common `Artist - Title` YouTube titles, then let you edit title, artist, album, genre, year, and playlist names before exporting.
+- Keep converted tracks in metadata review until title, artist, album, artwork, and playlist assignments are approved.
+- Move approved tracks into a clean `Music Library/{Artist}/{Album}/{Track # - Title}.m4a` structure and retag files before handoff.
+- Add approved tracks to Apple Music's `iPod Sync` playlist for Finder/iPod sync.
 
 Quality note: YouTube-only sources are already compressed. iListen preserves the best available source path it can, but it cannot restore original studio/master quality.
 
@@ -46,14 +47,13 @@ By default the helper opens a project at:
 ~/Music/iListen Project
 ```
 
-Converted files and playlists land in:
+Converted files land in:
 
 ```text
 ~/Music/iListen Project/exports/Music Library/
-~/Music/iListen Project/exports/Playlists/
 ```
 
-Each track keeps playlist names in SQLite. New jobs start with `iPod - YouTube Converts`; after YouTube analysis, iListen also adds an artist playlist such as `iPod - Cigarettes After Sex` when it can infer the artist.
+Each track keeps metadata review, approval, file path, and Apple Music handoff status in SQLite. YouTube metadata is only a first pass; final user-facing names should look like normal music-library entries. iListen uses one required Apple Music sync playlist named `iPod Sync` and does not auto-create `iPod - ...` playlists.
 
 ## Required Converter Tools
 
@@ -91,8 +91,10 @@ Local Vite origins such as `http://localhost:5173` are allowed automatically.
 - `POST /jobs/:id/cancel` - cancels an active job.
 - `POST /jobs/:id/retry` - requeues a failed/canceled job.
 - `POST /jobs/:id/remove` - removes a job.
+- `POST /jobs/organize` - applies approved metadata, moves/renames files, retags audio, and marks tracks approved.
 - `GET /events` - streams logs and queue updates over SSE.
-- `POST /exports/playlist` - writes an iPod import playlist.
+- `POST /applemusic/handoff` - adds approved tracks to Apple Music's `iPod Sync` playlist.
+- `POST /applemusic/cleanup` - removes stale iListen-created playlists from older workflows.
 
 ## Verify
 
