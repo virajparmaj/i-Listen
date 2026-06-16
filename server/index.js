@@ -1,11 +1,17 @@
 import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { mkdir, stat, writeFile } from "node:fs/promises";
 import { createServer, request as httpRequest } from "node:http";
 import { randomBytes } from "node:crypto";
-import { extname } from "node:path";
+import { spawn } from "node:child_process";
+import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { addLog, createJobs, getJob, listJobs, listLogs, openDatabase, removeJob, updateJob } from "./lib/db.js";
+import { addLog, createJobs, getJob, getState, listJobs, listLogs, openDatabase, removeJob, setState, updateJob } from "./lib/db.js";
 import { JobRunner, writePlaylists } from "./lib/converter.js";
+import { retagExport } from "./lib/retag.js";
+import { cleanupStaleIlistenPlaylists, classifyOsascriptError, handoffToAppleMusic, ILISTEN_FOLDER, MASTER_PLAYLIST } from "./lib/appleMusic.js";
+import { detectIpods, verifyIpodVolume } from "./lib/ipod.js";
+import { appendFileLog } from "./lib/filelog.js";
+import { organizeExport } from "./lib/organize.js";
 import { detectTools } from "./lib/tools.js";
 import { DEFAULT_PROJECT_PATH, ensureProject } from "./lib/paths.js";
 import { splitYoutubeUrls } from "./lib/youtube.js";
@@ -98,6 +104,21 @@ function requireProject(req, res, state, allowedOrigins) {
 function emit(state, payload) {
   const data = `data: ${JSON.stringify(payload)}\n\n`;
   state.clients.forEach((client) => client.write(data));
+}
+
+function appleMusicEligible(job) {
+  return job.status === "complete"
+    && job.outputPath
+    && job.exportStatus !== "invalid"
+    && job.metadataReviewStatus === "approved";
+}
+
+export function selectAppleMusicHandoffJobs(jobs, ids = null) {
+  const idSet = Array.isArray(ids) ? new Set(ids) : null;
+  const scoped = idSet ? jobs.filter((job) => idSet.has(job.id)) : jobs;
+  const eligible = scoped.filter(appleMusicEligible);
+  const pending = eligible.filter((job) => job.appleMusicPlaylistStatus !== "added");
+  return { eligible, pending };
 }
 
 export function openProjectState(state, projectPath = DEFAULT_PROJECT_PATH) {
@@ -227,6 +248,82 @@ async function handleEvents(req, res, state, allowedOrigins) {
   req.on("close", () => state.clients.delete(res));
 }
 
+const METADATA_KEYS = [
+  "title", "artist", "album", "albumArtist", "year", "genre",
+  "track", "disc", "composer", "comment", "customCoverPath", "playlists",
+];
+
+function metaTouched(patch) {
+  return Object.keys(patch || {}).some((key) => METADATA_KEYS.includes(key));
+}
+
+/**
+ * Re-tag an already-exported file in place so Apple Music ingests fresh tags,
+ * then reset its downstream sync status. Runs in the background; emits when done.
+ */
+async function runRetag(state, id) {
+  const job = getJob(state.db, id);
+  if (!job || job.status !== "complete" || !job.outputPath) return;
+  if (!state.tools?.ffmpeg?.ok || !state.tools?.ffprobe?.ok) {
+    addLog(state.db, "Cannot re-tag: ffmpeg/ffprobe unavailable.", "warn", "Retag:");
+    emit(state, { type: "logs", logs: listLogs(state.db) });
+    return;
+  }
+
+  // Guard against concurrent ffmpeg rewrites of the same output file.
+  if (!state.retagging) state.retagging = new Set();
+  if (state.retagging.has(id)) return;
+  state.retagging.add(id);
+
+  updateJob(state.db, id, {
+    appleMusicImportStatus: "pending",
+    appleMusicPlaylistStatus: "pending",
+    readyForFinderSync: 0,
+    syncState: "",
+  });
+
+  try {
+    const result = await retagExport(state.tools, job);
+    if (result.ok) {
+      updateJob(state.db, id, {
+        exportStatus: "validated",
+        metadataStatus: result.metadataStatus,
+        artworkStatus: result.artworkStatus,
+        durationSec: result.durationSec,
+        sizeBytes: result.sizeBytes,
+        lastError: "",
+      });
+      addLog(state.db, `Re-tagged ${job.title}; re-add to Apple Music to refresh.`, "ok", "Retag:");
+      void appendFileLog(state.project, "applemusic.log", `retag ok: ${job.outputPath}`);
+    } else {
+      updateJob(state.db, id, { exportStatus: "invalid", lastError: result.error });
+      addLog(state.db, `Re-tag failed for ${job.title}: ${result.error}`, "err", "Retag:");
+      void appendFileLog(state.project, "applemusic.log", `retag fail: ${job.outputPath} :: ${result.error}`);
+    }
+  } catch (error) {
+    updateJob(state.db, id, { lastError: error.message });
+    addLog(state.db, `Re-tag error for ${job.title}: ${error.message}`, "err", "Retag:");
+  } finally {
+    state.retagging.delete(id);
+  }
+  emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+}
+
+/**
+ * Decode a base64 image data URL and persist it as the job's custom cover.
+ * @returns {Promise<{ ok: boolean, path?: string, error?: string }>}
+ */
+async function persistArtwork(project, id, dataUrl) {
+  const match = /^data:image\/(png|jpe?g|webp);base64,(.+)$/i.exec(String(dataUrl || ""));
+  if (!match) return { ok: false, error: "Expected a base64 image data URL (png, jpeg, or webp)." };
+  const ext = match[1].toLowerCase() === "jpeg" || match[1].toLowerCase() === "jpg" ? "jpg" : match[1].toLowerCase();
+  const buffer = Buffer.from(match[2], "base64");
+  const path = join(project.artworkDir, `${id}-custom.${ext}`);
+  await mkdir(project.artworkDir, { recursive: true });
+  await writeFile(path, buffer);
+  return { ok: true, path };
+}
+
 export async function route(req, res, state, allowedOrigins) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   if (!isAllowedOrigin(req.headers.origin, allowedOrigins)) {
@@ -325,9 +422,19 @@ export async function route(req, res, state, allowedOrigins) {
 
     if (req.method === "PATCH" && !action) {
       const body = await readJson(req);
-      const job = updateJob(state.db, id, body);
+      const before = getJob(state.db, id);
+      const patch = { ...body };
+      if (before && before.status === "complete" && metaTouched(body) && !body.metadataReviewStatus) {
+        patch.metadataReviewStatus = "needs_review";
+        patch.appleMusicImportStatus = "pending";
+        patch.appleMusicPlaylistStatus = "pending";
+        patch.readyForFinderSync = 0;
+        patch.syncState = "";
+      }
+      const job = updateJob(state.db, id, patch);
       emit(state, { type: "jobs", jobs: listJobs(state.db) });
       send(res, req, allowedOrigins, 200, { job, jobs: listJobs(state.db) });
+      if (before && before.status === "complete" && metaTouched(body)) void runRetag(state, id);
       return;
     }
 
@@ -364,6 +471,103 @@ export async function route(req, res, state, allowedOrigins) {
       send(res, req, allowedOrigins, 200, { job, jobs: listJobs(state.db) });
       return;
     }
+
+    if (req.method === "POST" && action === "retag") {
+      if (!job) {
+        send(res, req, allowedOrigins, 404, { error: "Job not found" });
+        return;
+      }
+      send(res, req, allowedOrigins, 202, { job: getJob(state.db, id), jobs: listJobs(state.db) });
+      void runRetag(state, id);
+      return;
+    }
+
+    if (req.method === "POST" && action === "artwork") {
+      if (!job) {
+        send(res, req, allowedOrigins, 404, { error: "Job not found" });
+        return;
+      }
+      const body = await readJson(req);
+      const saved = await persistArtwork(state.project, id, body.dataUrl);
+      if (!saved.ok) {
+        send(res, req, allowedOrigins, 400, { error: saved.error });
+        return;
+      }
+      updateJob(state.db, id, { customCoverPath: saved.path, artworkStatus: "external" });
+      addLog(state.db, `Saved custom artwork for ${job.title}.`, "ok", "Artwork:");
+      emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+      send(res, req, allowedOrigins, 200, { job: getJob(state.db, id), jobs: listJobs(state.db) });
+      return;
+    }
+  }
+
+  if (req.method === "POST" && url.pathname === "/jobs/organize") {
+    const body = await readJson(req);
+    const items = Array.isArray(body.items) ? body.items : [];
+    if (!items.length) {
+      send(res, req, allowedOrigins, 400, { error: "Provide one or more tracks to organize." });
+      return;
+    }
+    if (!state.tools?.ffmpeg?.ok || !state.tools?.ffprobe?.ok) {
+      send(res, req, allowedOrigins, 409, { error: "ffmpeg and ffprobe are required to organize and retag exports." });
+      return;
+    }
+
+    const results = [];
+    for (const item of items) {
+      const job = getJob(state.db, item.id);
+      if (!job) {
+        results.push({ id: item.id, ok: false, error: "Job not found." });
+        continue;
+      }
+      if (job.status !== "complete" || !job.outputPath) {
+        results.push({ id: item.id, ok: false, error: "Track must be converted before it can be organized." });
+        continue;
+      }
+
+      try {
+        const organized = await organizeExport({ project: state.project, tools: state.tools, job, metadata: item });
+        if (!organized.ok) {
+          updateJob(state.db, job.id, {
+            ...organized.metadataPatch,
+            outputPath: organized.path || job.outputPath,
+            exportStatus: "invalid",
+            metadataReviewStatus: "needs_review",
+            lastError: organized.error,
+          });
+          addLog(state.db, `Organize failed for ${job.title}: ${organized.error}`, "err", "Organize:");
+          results.push({ id: job.id, ok: false, error: organized.error });
+          continue;
+        }
+
+        const updated = updateJob(state.db, job.id, {
+          ...organized.metadataPatch,
+          outputPath: organized.path,
+          exportStatus: "validated",
+          metadataStatus: organized.validation.metadataStatus,
+          artworkStatus: organized.validation.artworkStatus,
+          durationSec: organized.validation.durationSec,
+          sizeBytes: organized.validation.sizeBytes,
+          metadataReviewStatus: "approved",
+          appleMusicImportStatus: "pending",
+          appleMusicPlaylistStatus: "pending",
+          readyForFinderSync: 0,
+          syncState: "",
+          musicPersistentId: "",
+          lastError: "",
+        });
+        addLog(state.db, `Approved and organized ${updated.artist} — ${updated.title}.`, "ok", "Organize:");
+        results.push({ id: job.id, ok: true, path: organized.path });
+      } catch (error) {
+        updateJob(state.db, job.id, { metadataReviewStatus: "needs_review", lastError: error.message });
+        addLog(state.db, `Organize error for ${job.title}: ${error.message}`, "err", "Organize:");
+        results.push({ id: job.id, ok: false, error: error.message });
+      }
+    }
+
+    emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+    send(res, req, allowedOrigins, 200, { results, jobs: listJobs(state.db), logs: listLogs(state.db) });
+    return;
   }
 
   if (req.method === "POST" && url.pathname === "/exports/playlist") {
@@ -371,6 +575,172 @@ export async function route(req, res, state, allowedOrigins) {
     addLog(state.db, `Wrote ${playlist.playlists.length} playlist${playlist.playlists.length === 1 ? "" : "s"} with ${playlist.count} converted track${playlist.count === 1 ? "" : "s"}.`, "ok", "Export:");
     emit(state, { type: "logs", logs: listLogs(state.db) });
     send(res, req, allowedOrigins, 200, { playlist, logs: listLogs(state.db) });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/exports/reveal") {
+    try {
+      spawn("open", [state.project.exportsDir], { stdio: "ignore", detached: true }).unref();
+      send(res, req, allowedOrigins, 200, { ok: true, path: state.project.exportsDir });
+    } catch (error) {
+      send(res, req, allowedOrigins, 500, { error: error.message });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/ipod/handoff") {
+    const body = await readJson(req);
+    const { eligible, pending: selected } = selectAppleMusicHandoffJobs(listJobs(state.db), body.ids);
+
+    if (!selected.length) {
+      if (eligible.length) {
+        const message = "Nothing new to add; sync in Finder.";
+        addLog(state.db, `Apple Music handoff skipped: ${eligible.length} approved track${eligible.length === 1 ? "" : "s"} already in "${MASTER_PLAYLIST}".`, "ok", "Sync:", "applemusic");
+        emit(state, { type: "logs", logs: listLogs(state.db) });
+        send(res, req, allowedOrigins, 200, {
+          noop: true,
+          message,
+          folder: ILISTEN_FOLDER,
+          master: MASTER_PLAYLIST,
+          playlists: [{ name: MASTER_PLAYLIST, count: eligible.length }],
+          results: [],
+          jobs: listJobs(state.db),
+          logs: listLogs(state.db),
+        });
+        return;
+      }
+      send(res, req, allowedOrigins, 400, { error: "No approved exports are ready to hand off to Apple Music. Review and organize metadata first." });
+      return;
+    }
+
+    addLog(state.db, `Apple Music handoff: ${selected.length} track${selected.length === 1 ? "" : "s"}.`, null, "Sync:", "applemusic");
+    emit(state, { type: "logs", logs: listLogs(state.db) });
+
+    let outcome;
+    try {
+      outcome = await handoffToAppleMusic(selected, {
+        onLog: (msg, kind) => {
+          addLog(state.db, msg, kind || null, "Sync:", "applemusic");
+          void appendFileLog(state.project, "applemusic.log", msg);
+        },
+      });
+    } catch (error) {
+      const classified = classifyOsascriptError(error);
+      addLog(state.db, classified.userMessage, "err", "Sync:", "applemusic");
+      void appendFileLog(state.project, "applemusic.log", `handoff blocked (${classified.kind}): ${classified.userMessage}`);
+      emit(state, { type: "logs", logs: listLogs(state.db) });
+      send(res, req, allowedOrigins, 200, {
+        blocked: true,
+        kind: classified.kind,
+        message: classified.userMessage,
+        jobs: listJobs(state.db),
+        logs: listLogs(state.db),
+      });
+      return;
+    }
+
+    const byId = new Map(outcome.results.map((result) => [result.id, result]));
+    selected.forEach((job) => {
+      const result = byId.get(job.id);
+      if (!result) return;
+      if (result.importStatus === "imported") {
+        updateJob(state.db, job.id, {
+          appleMusicImportStatus: "imported",
+          appleMusicPlaylistStatus: "added",
+          musicPersistentId: result.persistentId,
+          readyForFinderSync: 1,
+          syncState: "needs_manual",
+          lastError: "",
+        });
+      } else {
+        updateJob(state.db, job.id, {
+          appleMusicImportStatus: "failed",
+          lastError: result.reason || "Apple Music import failed.",
+        });
+      }
+    });
+
+    const imported = outcome.results.filter((result) => result.importStatus === "imported").length;
+    addLog(state.db, `Apple Music: ${imported}/${selected.length} ready in "${MASTER_PLAYLIST}".`, "ok", "Sync:", "applemusic");
+    emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+    send(res, req, allowedOrigins, 200, {
+      folder: outcome.folder,
+      master: outcome.master,
+      playlists: outcome.playlists,
+      results: outcome.results,
+      jobs: listJobs(state.db),
+      logs: listLogs(state.db),
+    });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/applemusic/cleanup") {
+    try {
+      const removed = await cleanupStaleIlistenPlaylists();
+      addLog(state.db, `Apple Music cleanup removed ${removed.length} stale playlist${removed.length === 1 ? "" : "s"}.`, "ok", "Sync:", "applemusic");
+      emit(state, { type: "logs", logs: listLogs(state.db) });
+      send(res, req, allowedOrigins, 200, { removed, jobs: listJobs(state.db), logs: listLogs(state.db) });
+    } catch (error) {
+      const classified = classifyOsascriptError(error);
+      addLog(state.db, classified.userMessage, "err", "Sync:", "applemusic");
+      send(res, req, allowedOrigins, 200, { blocked: true, kind: classified.kind, message: classified.userMessage, jobs: listJobs(state.db), logs: listLogs(state.db) });
+    }
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/ipod/devices") {
+    const detection = await detectIpods();
+    setState(state.db, "ipod_detected", detection.connected ? "1" : "0");
+    if (detection.device?.connected) {
+      setState(state.db, "ipod_name", detection.device.name || "");
+      setState(state.db, "ipod_free_space", String(detection.device.freeBytes || 0));
+      setState(state.db, "ipod_capacity", String(detection.device.capacityBytes || 0));
+      setState(state.db, "disk_use_enabled", detection.device.diskUseEnabled ? "1" : "0");
+      setState(state.db, "can_sync_finder", detection.device.canSyncViaFinder ? "1" : "0");
+    }
+    void appendFileLog(state.project, "ipod.log", `devices: connected=${detection.connected} mounted=${detection.mounted.length} usb=${detection.usb.length}`);
+    send(res, req, allowedOrigins, 200, { ...detection, selectedPath: getState(state.db, "ipod_volume_path", "") });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/ipod/select") {
+    const body = await readJson(req);
+    const verified = verifyIpodVolume(body.path);
+    if (!verified.ok) {
+      send(res, req, allowedOrigins, 400, { error: verified.error });
+      return;
+    }
+    setState(state.db, "ipod_volume_path", verified.volumePath);
+    addLog(state.db, `Selected iPod volume: ${verified.volumePath}`, "ok", "iPod:", "ipod");
+    void appendFileLog(state.project, "ipod.log", `manual select: ${verified.volumePath}`);
+    emit(state, { type: "logs", logs: listLogs(state.db) });
+    send(res, req, allowedOrigins, 200, { device: verified, jobs: listJobs(state.db), logs: listLogs(state.db) });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/ipod/status") {
+    const jobs = listJobs(state.db);
+    const complete = jobs.filter((job) => job.status === "complete");
+    const counts = {
+      total: jobs.length,
+      complete: complete.length,
+      validated: complete.filter((job) => job.exportStatus === "validated").length,
+      approved: complete.filter((job) => job.metadataReviewStatus === "approved").length,
+      metadataComplete: complete.filter((job) => job.metadataStatus === "complete").length,
+      artworkEmbedded: complete.filter((job) => job.artworkStatus === "embedded").length,
+      imported: complete.filter((job) => job.appleMusicImportStatus === "imported").length,
+      inPlaylist: complete.filter((job) => job.appleMusicPlaylistStatus === "added").length,
+    };
+    const device = {
+      connected: getState(state.db, "ipod_detected", "0") === "1",
+      name: getState(state.db, "ipod_name", ""),
+      freeBytes: Number(getState(state.db, "ipod_free_space", "0")) || 0,
+      capacityBytes: Number(getState(state.db, "ipod_capacity", "0")) || 0,
+      diskUseEnabled: getState(state.db, "disk_use_enabled", "0") === "1",
+      canSyncViaFinder: getState(state.db, "can_sync_finder", "0") === "1",
+      volumePath: getState(state.db, "ipod_volume_path", ""),
+    };
+    send(res, req, allowedOrigins, 200, { counts, device, folder: ILISTEN_FOLDER, master: MASTER_PLAYLIST });
     return;
   }
 

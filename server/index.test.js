@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { PassThrough, Readable } from "node:stream";
 import { afterEach, describe, expect, it } from "vitest";
 import { createJobs, openDatabase, updateJob } from "./lib/db.js";
-import { createAppState, helperReuseMessage, helperStartupMessage, probeRunningHelper, route } from "./index.js";
+import { createAppState, helperReuseMessage, helperStartupMessage, probeRunningHelper, route, selectAppleMusicHandoffJobs } from "./index.js";
 
 let tempDir = null;
 
@@ -239,5 +239,149 @@ describe("helper asset endpoints", () => {
     expect(response.res.headers["Content-Range"]).toBe("bytes 1-3/6");
     expect(response.res.headers["Content-Type"]).toBe("audio/mp4");
     expect(response.body().toString("utf8")).toBe("bcd");
+  });
+});
+
+describe("iPod sync endpoints", () => {
+  it("selects only new or changed tracks for Apple Music handoff", () => {
+    const jobs = [
+      { id: "old-1", status: "complete", outputPath: "/tmp/old-1.m4a", exportStatus: "validated", metadataReviewStatus: "approved", appleMusicPlaylistStatus: "added" },
+      { id: "old-2", status: "complete", outputPath: "/tmp/old-2.m4a", exportStatus: "validated", metadataReviewStatus: "approved", appleMusicPlaylistStatus: "added" },
+      { id: "old-3", status: "complete", outputPath: "/tmp/old-3.m4a", exportStatus: "validated", metadataReviewStatus: "approved", appleMusicPlaylistStatus: "added" },
+      { id: "new-1", status: "complete", outputPath: "/tmp/new-1.m4a", exportStatus: "validated", metadataReviewStatus: "approved", appleMusicPlaylistStatus: "pending" },
+    ];
+
+    const selected = selectAppleMusicHandoffJobs(jobs);
+
+    expect(selected.eligible.map((job) => job.id)).toEqual(["old-1", "old-2", "old-3", "new-1"]);
+    expect(selected.pending.map((job) => job.id)).toEqual(["new-1"]);
+  });
+
+  it("rejects an Apple Music handoff when nothing is validated", async () => {
+    const { state } = createState();
+    createJobs(state.db, ["https://youtube.com/watch?v=noexport"]);
+
+    const response = await request(state, {
+      method: "POST",
+      url: "/ipod/handoff?token=test-token",
+      body: "{}",
+    });
+
+    expect(response.res.statusCode).toBe(400);
+  });
+
+  it("rejects a validated handoff until metadata is approved", async () => {
+    const { state, project } = createState();
+    const job = createJobs(state.db, ["https://youtube.com/watch?v=needsreview"]).created[0];
+    const outputPath = join(project.exportsDir, "Music Library", "Artist", "Album", "01 - Song.m4a");
+    mkdirSync(join(outputPath, ".."), { recursive: true });
+    writeFileSync(outputPath, Buffer.from("abcdef"));
+    updateJob(state.db, job.id, {
+      status: "complete",
+      exportStatus: "validated",
+      outputPath,
+      metadataReviewStatus: "needs_review",
+    });
+
+    const response = await request(state, {
+      method: "POST",
+      url: "/ipod/handoff?token=test-token",
+      body: "{}",
+    });
+
+    expect(response.res.statusCode).toBe(400);
+    expect(response.json().error).toMatch(/approved/);
+  });
+
+  it("returns a no-op when approved tracks are already in iPod Sync", async () => {
+    const { state, project } = createState();
+    const job = createJobs(state.db, ["https://youtube.com/watch?v=alreadyadded"]).created[0];
+    updateJob(state.db, job.id, {
+      status: "complete",
+      exportStatus: "validated",
+      outputPath: join(project.exportsDir, "Music Library", "Artist", "Album", "01 - Song.m4a"),
+      metadataReviewStatus: "approved",
+      appleMusicImportStatus: "imported",
+      appleMusicPlaylistStatus: "added",
+      readyForFinderSync: 1,
+      syncState: "needs_manual",
+    });
+
+    const response = await request(state, {
+      method: "POST",
+      url: "/ipod/handoff?token=test-token",
+      body: "{}",
+    });
+
+    expect(response.res.statusCode).toBe(200);
+    const data = response.json();
+    expect(data.noop).toBe(true);
+    expect(data.message).toBe("Nothing new to add; sync in Finder.");
+    expect(data.results).toEqual([]);
+    expect(data.master).toBe("iPod Sync");
+  });
+
+  it("reports iPod status with pipeline counts", async () => {
+    const { state } = createState();
+    const job = createJobs(state.db, ["https://youtube.com/watch?v=statuscount"]).created[0];
+    updateJob(state.db, job.id, {
+      status: "complete",
+      exportStatus: "validated",
+      outputPath: "/tmp/x.m4a",
+      metadataStatus: "complete",
+      artworkStatus: "embedded",
+      metadataReviewStatus: "approved",
+    });
+
+    const response = await request(state, { method: "GET", url: "/ipod/status?token=test-token" });
+
+    expect(response.res.statusCode).toBe(200);
+    const data = response.json();
+    expect(data.counts.validated).toBe(1);
+    expect(data.counts.approved).toBe(1);
+    expect(data.counts.metadataComplete).toBe(1);
+    expect(data.master).toBe("iPod Sync");
+    expect(data.folder).toBe("iListen");
+  });
+
+  it("rejects a manual iPod volume that is not an iPod", async () => {
+    const { state, project } = createState();
+
+    const response = await request(state, {
+      method: "POST",
+      url: "/ipod/select?token=test-token",
+      body: JSON.stringify({ path: project.root }),
+    });
+
+    expect(response.res.statusCode).toBe(400);
+    expect(response.json().error).toMatch(/iPod/);
+  });
+
+  it("returns an iPod detection payload shape", async () => {
+    const { state } = createState();
+
+    const response = await request(state, { method: "GET", url: "/ipod/devices?token=test-token" });
+
+    expect(response.res.statusCode).toBe(200);
+    const data = response.json();
+    expect(typeof data.connected).toBe("boolean");
+    expect(Array.isArray(data.mounted)).toBe(true);
+    expect(Array.isArray(data.usb)).toBe(true);
+  });
+
+  it("persists uploaded custom artwork for a job", async () => {
+    const { state } = createState();
+    const job = createJobs(state.db, ["https://youtube.com/watch?v=art"]).created[0];
+    const dataUrl =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+    const response = await request(state, {
+      method: "POST",
+      url: `/jobs/${job.id}/artwork?token=test-token`,
+      body: JSON.stringify({ dataUrl }),
+    });
+
+    expect(response.res.statusCode).toBe(200);
+    expect(response.json().job.customCoverPath).toMatch(/-custom\.png$/);
   });
 });
