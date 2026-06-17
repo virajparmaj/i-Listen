@@ -35,13 +35,9 @@ function Step({ index, label, tone, detail }) {
 }
 
 const finderSteps = [
-  "Open Finder.",
-  "Select Viraj Parmar’s iPod in the sidebar.",
-  "Open the Music tab.",
-  "Choose selected playlists.",
-  "Tick iPod Sync.",
-  "Click Apply/Sync.",
-  "Eject the iPod before unplugging it.",
+  "Select “Viraj Parmar’s iPod” in Finder → Music tab.",
+  "Choose selected playlists → tick “iPod Sync”.",
+  "Apply/Sync, then eject before unplugging.",
 ];
 
 function FinderSyncChecklist({ count }) {
@@ -204,7 +200,7 @@ export function SyncView({ tracks, helper, ipod, actions, onShowToast, onEdit })
   };
 
   return (
-    <div className="il-sync-view" style={{ display: "grid", gap: 16, maxWidth: 1080, margin: "0 auto", padding: "4px 0 40px" }}>
+    <div className="il-sync-view" style={{ display: "grid", gap: 16, padding: "4px 0 40px" }}>
       <IpodExplainer />
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "start" }}>
@@ -261,15 +257,19 @@ export function SyncView({ tracks, helper, ipod, actions, onShowToast, onEdit })
           </span>
         </div>
         {complete.length ? (
-          complete.map((track) => (
-            <TrackRow
-              key={track.id}
-              track={track}
-              onEdit={onEdit}
-              onApprove={onApprove}
-              approving={approvingId === track.id}
-            />
-          ))
+          <div className="il-scroll" style={{ maxHeight: "min(56vh, 560px)", overflowY: "auto" }}>
+            <div className="il-track-grid">
+              {complete.map((track) => (
+                <TrackRow
+                  key={track.id}
+                  track={track}
+                  onEdit={onEdit}
+                  onApprove={onApprove}
+                  approving={approvingId === track.id}
+                />
+              ))}
+            </div>
+          </div>
         ) : (
           <div style={{ padding: 20, fontFamily: "var(--font-typewriter)", fontSize: "var(--text-xs)", color: "var(--text-secondary)" }}>
             No converted tracks yet. Convert some YouTube links first, then come back to sync.

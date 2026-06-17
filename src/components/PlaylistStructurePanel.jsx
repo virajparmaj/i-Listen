@@ -61,8 +61,7 @@ export function PlaylistStructurePanel({ tracks }) {
 
         {!sources.length && (
           <div style={{ ...mutedText, paddingLeft: 18, lineHeight: 1.5 }}>
-            Add playlist names in a track’s metadata (e.g. “Hindi Mix”) to create
-            custom playlists under the iListen folder.
+            Name a playlist in a track’s metadata to add one here.
           </div>
         )}
       </div>

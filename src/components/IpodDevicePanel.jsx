@@ -73,8 +73,8 @@ export function IpodDevicePanel({ ipod, helperConnected, onRefresh, onSelect, on
       ) : (
         <div style={{ fontFamily: "var(--font-typewriter)", fontSize: "var(--text-xs)", color: "var(--text-secondary)", lineHeight: 1.5 }}>
           {helperConnected
-            ? "No iPod detected. Connect your iPod Classic over USB, then press Refresh. If it only shows in Finder, choose its volume below."
-            : "Connect the local helper to detect a connected iPod."}
+            ? "No iPod detected — connect over USB, then Refresh."
+            : "Connect the helper to detect an iPod."}
         </div>
       )}
 
@@ -82,7 +82,7 @@ export function IpodDevicePanel({ ipod, helperConnected, onRefresh, onSelect, on
         marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border-hairline)",
         display: "grid", gap: 8,
       }}>
-        <span style={rowKey}>Choose iPod volume manually</span>
+        <span style={rowKey}>Choose volume manually</span>
         <div style={{ display: "flex", gap: 8 }}>
           <Input
             value={manualPath}
@@ -95,15 +95,6 @@ export function IpodDevicePanel({ ipod, helperConnected, onRefresh, onSelect, on
         {ipod?.selectedPath && (
           <div style={rowVal}>Selected: {ipod.selectedPath}</div>
         )}
-      </div>
-
-      <div style={{
-        marginTop: 12, padding: "8px 10px", borderRadius: "var(--radius-sm)",
-        background: "var(--status-warning-soft)", border: "1px solid var(--border-warning)",
-        fontFamily: "var(--font-typewriter)", fontSize: "var(--text-xs)", color: "var(--text-warning-strong)", lineHeight: 1.45,
-      }}>
-        The plain “iPod” disk is storage only. Copying songs onto it in Finder will not make
-        them playable — sync through Apple Music / Finder instead.
       </div>
     </Card>
   );
