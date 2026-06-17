@@ -24,13 +24,14 @@ export function Button({
   const s = sizes[size] || sizes.md;
 
   const variants = {
-    primary: { background: "var(--grad-primary)", color: "var(--text-on-accent)", border: "1px solid var(--accent-primary-press)", boxShadow: "var(--shadow-card), var(--gloss-top-dark)" },
-    secondary: { background: "var(--grad-chrome)", color: "var(--text-primary)", border: "1px solid var(--border-strong)", boxShadow: "var(--shadow-card), var(--gloss-top)" },
-    graphite: { background: "var(--grad-graphite)", color: "var(--text-on-dark)", border: "1px solid #1f1f21", boxShadow: "var(--shadow-card), var(--gloss-top-dark)" },
-    ghost: { background: "transparent", color: "var(--accent-primary)", border: "1px solid transparent", boxShadow: "none" },
-    danger: { background: "linear-gradient(180deg, #C97373 0%, var(--status-error) 100%)", color: "var(--text-on-accent)", border: "1px solid #9c4a4a", boxShadow: "var(--shadow-card), var(--gloss-top-dark)" },
+    primary: { background: "var(--grad-primary)", color: "var(--text-on-accent)", border: "1px solid var(--accent-primary-press)", boxShadow: "var(--shadow-card), var(--gloss-aqua)", radius: "var(--radius-pill)", textShadow: "0 1px 1px rgba(20,50,90,0.45)" },
+    secondary: { background: "var(--grad-chrome)", color: "var(--text-primary)", border: "1px solid var(--border-strong)", boxShadow: "var(--shadow-card), var(--gloss-top)", radius: "var(--radius-sm)" },
+    graphite: { background: "var(--grad-graphite)", color: "var(--text-on-dark)", border: "1px solid #1f1f21", boxShadow: "var(--shadow-card), var(--gloss-top-dark)", radius: "var(--radius-sm)", textShadow: "0 1px 1px rgba(0,0,0,0.5)" },
+    ghost: { background: "transparent", color: "var(--accent-primary)", border: "1px solid transparent", boxShadow: "none", radius: "var(--radius-sm)" },
+    danger: { background: "linear-gradient(180deg, #D98A8A 0%, #C97373 49%, #B75D5D 51%, #A24F4F 100%)", color: "var(--text-on-accent)", border: "1px solid #9c4a4a", boxShadow: "var(--shadow-card), var(--gloss-aqua)", radius: "var(--radius-pill)", textShadow: "0 1px 1px rgba(70,20,20,0.5)" },
   };
   const v = variants[variant] || variants.secondary;
+  const { radius, ...vStyle } = v;
 
   return (
     <button
@@ -44,14 +45,14 @@ export function Button({
         padding: s.padding,
         fontSize: s.font,
         fontFamily: "var(--font-ui)",
-        fontWeight: "var(--weight-medium)",
-        borderRadius: "var(--radius-sm)",
+        fontWeight: "var(--weight-semibold)",
+        borderRadius: radius,
         cursor: disabled ? "not-allowed" : "pointer",
         opacity: disabled ? 0.5 : 1,
         width: fullWidth ? "100%" : "auto",
         whiteSpace: "nowrap",
         transition: "filter 120ms ease, transform 80ms ease",
-        ...v,
+        ...vStyle,
         ...style,
       }}
       onMouseDown={(e) => !disabled && (e.currentTarget.style.transform = "translateY(0.5px)")}

@@ -7,7 +7,7 @@ export function IpodPreview({ track }) {
   const now = track || { title: "Nothing playing", artist: "—", duration: "0:00", coverArt: null, thumbnailUrl: "", thumbColor: "var(--ipod-graphite)" };
   return (
     <div style={{
-      borderRadius: "var(--radius-ipod)", padding: 16, minHeight: 420, background: "var(--grad-chrome)",
+      borderRadius: "var(--radius-ipod)", padding: 16, minHeight: "clamp(340px, 46vh, 420px)", background: "var(--grad-chrome)",
       border: "1px solid var(--border-strong)", boxShadow: "var(--shadow-raised), var(--gloss-top)",
       display: "flex", flexDirection: "column", justifyContent: "space-between",
     }}>

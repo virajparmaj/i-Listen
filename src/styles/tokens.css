@@ -33,6 +33,12 @@
   --ipod-select-top:    #6FA0CF;
   --ipod-select-bottom: #3E6F9E;
 
+  /* ---- Aqua gel accents (early-2010s glossy blue) ---- */
+  --aqua-sheen:         #A9D2F6;
+  --aqua-bright:        #5E9CE6;
+  --aqua-mid:           #3A7ED2;
+  --aqua-deep:          #2A6ABB;
+
   /* ---- Semantic aliases ---- */
   --bg-app:            var(--ipod-bg);
   --surface-recessed:  var(--ipod-surface);
@@ -90,15 +96,20 @@
 
   --focus-ring:        #3E6F9E;
 
-  /* ---- Type ---- */
-  --font-ui: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", Arial, sans-serif;
-  --font-display: "DM Serif Display", "Hoefler Text", Georgia, serif;
-  --font-deco: "Limelight", "Copperplate", "Times New Roman", serif;
-  --font-script: "Kaushan Script", "Brush Script MT", cursive;
-  --font-typewriter: "Special Elite", "Courier New", monospace;
+  /* ---- Type ----
+     One authentic early-2010s Apple sans stack (Lucida Grande / Helvetica Neue)
+     drives all UI. --font-lcd (VT323) is kept ONLY for the iPod LCD readout and
+     --font-terminal for the logs panel. The former decorative aliases now point
+     at the same Apple sans, so existing class/inline usages inherit it without
+     touching every component. */
+  --font-ui: "Lucida Grande", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-display: var(--font-ui);
+  --font-deco: var(--font-ui);
+  --font-script: var(--font-ui);
+  --font-typewriter: var(--font-ui);
   --font-lcd: "VT323", "SF Mono", "Menlo", monospace;
   --font-terminal: "SF Mono", "Menlo", "Consolas", ui-monospace, monospace;
-  --font-mono: var(--font-typewriter);
+  --font-mono: var(--font-terminal);
 
   --weight-regular: 400;
   --weight-medium:  500;
@@ -137,6 +148,8 @@
   --control-h-lg: 44px;
   --container-max: 1120px;
   --content-max:   720px;
+  --content-wide:  1600px;
+  --topbar-h:      56px;
 
   /* ---- Radii ---- */
   --radius-xs:  4px;
@@ -161,15 +174,20 @@
     inset 0 1px 2px rgba(17, 17, 17, 0.10),
     inset 0 0 0 1px rgba(17, 17, 17, 0.04);
 
-  --gloss-top: inset 0 1px 0 rgba(255, 255, 255, 0.55);
-  --gloss-top-dark: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --gloss-top: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  --gloss-top-dark: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  /* Glassy Aqua gel: bright top edge + soft bottom recess for blue buttons */
+  --gloss-aqua: inset 0 1px 0 rgba(255, 255, 255, 0.85),
+                inset 0 -11px 14px -10px rgba(0, 0, 0, 0.24);
   --ring-focus: 0 0 0 3px rgba(62, 111, 158, 0.35);
 
   /* ---- Surface gradients ---- */
   --grad-panel:   linear-gradient(180deg, #FFFFFF 0%, #F4F4F1 100%);
-  --grad-chrome:  linear-gradient(180deg, #FAFAF8 0%, #E4E4E0 100%);
-  --grad-graphite: linear-gradient(180deg, #3A3A3C 0%, #2C2C2E 100%);
-  --grad-select:  linear-gradient(180deg, var(--ipod-select-top) 0%, var(--ipod-select-bottom) 100%);
-  --grad-primary: linear-gradient(180deg, var(--ipod-blue-bright) 0%, var(--ipod-blue) 100%);
+  /* Brushed-aluminium chrome: bright sheen at the very top, satin body below */
+  --grad-chrome:  linear-gradient(180deg, #FCFCFB 0%, #F1F1EE 48%, #E6E6E1 52%, #DDDDD8 100%);
+  --grad-graphite: linear-gradient(180deg, #444446 0%, #38383A 48%, #303032 52%, #28282A 100%);
+  /* Aqua gel: glassy top half, saturated bottom half, hard highlight break at 50% */
+  --grad-select:  linear-gradient(180deg, #8FC0F2 0%, #589AE2 49%, #3F84D4 51%, #2F6CC0 100%);
+  --grad-primary: linear-gradient(180deg, var(--aqua-sheen) 0%, var(--aqua-bright) 49%, var(--aqua-mid) 51%, var(--aqua-deep) 100%);
   --grad-lcd:     linear-gradient(180deg, #EEF4F8 0%, #DCE8F0 100%);
 }

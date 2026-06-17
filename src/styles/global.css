@@ -28,12 +28,15 @@ button { font-family: inherit; }
 a { color: var(--text-link); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
-/* Faint early-Aqua pinstripe behind the whole app */
+/* Faint early-Aqua pinstripe behind the whole app.
+   Capped to the viewport so the topbar stays fixed and each view's
+   content area (main) scrolls, instead of the whole page growing. */
 .il-desktop {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
-  min-height: 100%;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   background-image: repeating-linear-gradient(
     180deg, rgba(255, 255, 255, 0.45) 0 1px, transparent 1px 5px
   );
@@ -67,7 +70,7 @@ a:hover { text-decoration: underline; }
 
 .il-helper-popover {
   position: fixed;
-  top: 74px;
+  top: calc(var(--topbar-h) + 18px);
   right: 22px;
   width: min(360px, calc(100vw - 44px));
   z-index: 140;
@@ -83,6 +86,7 @@ a:hover { text-decoration: underline; }
   padding: clamp(18px, 2vw, 28px) clamp(18px, 2vw, 30px) 48px;
   box-sizing: border-box;
   min-height: 0;
+  overflow-y: auto;
 }
 
 .il-import-grid {
@@ -101,6 +105,9 @@ a:hover { text-decoration: underline; }
   align-items: stretch;
   flex: 1 1 auto;
   min-height: 0;
+  width: 100%;
+  max-width: var(--content-wide);
+  margin-inline: auto;
 }
 
 .il-convert-main {
@@ -112,21 +119,48 @@ a:hover { text-decoration: underline; }
   min-width: 0;
 }
 
+/* Keep wide views from stretching edge-to-edge on large monitors */
+.il-library-grid,
+.il-sync-view {
+  width: 100%;
+  max-width: var(--content-wide);
+  margin-inline: auto;
+}
+
+/* Sync "Tracks": two side-by-side columns for denser viewing */
+.il-track-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.il-track-grid > *:nth-child(even) {
+  border-left: 1px solid var(--border-hairline);
+}
+
+@media (max-width: 860px) {
+  .il-track-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .il-track-grid > *:nth-child(even) {
+    border-left: none;
+  }
+}
+
 .il-side-rail-shell {
   display: flex;
+  align-items: flex-start;
   min-height: 0;
   min-width: 0;
 }
 
 .il-side-rail {
   position: sticky;
-  top: 78px;
+  top: 4px;
+  align-self: flex-start;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   gap: 18px;
-  min-height: 100%;
-  height: 100%;
 }
 
 .il-queue-section {
@@ -137,7 +171,7 @@ a:hover { text-decoration: underline; }
 
 .il-side-rail-export {
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   min-height: 0;
 }
 
@@ -147,10 +181,10 @@ a:hover { text-decoration: underline; }
 
 .il-export-card {
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   flex-direction: column;
-  justify-content: space-between;
-  min-height: 100%;
+  gap: 10px;
+  min-height: 0;
 }
 
 .il-import-card,
@@ -163,6 +197,13 @@ a:hover { text-decoration: underline; }
     0 2px 6px rgba(78, 73, 60, 0.08) !important;
 }
 
+/* Pin the import card to its natural height so a tall queue can't crush it.
+   It carries overflow:hidden, which would otherwise let its flex auto-min
+   collapse to 0 inside the viewport-capped Convert column. */
+.il-import-card {
+  flex: 0 0 auto;
+}
+
 .il-queue-card {
   display: flex;
   flex: 1 1 auto;
@@ -172,6 +213,9 @@ a:hover { text-decoration: underline; }
 
 .il-queue-list {
   flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .il-queue-empty {
@@ -209,7 +253,7 @@ a:hover { text-decoration: underline; }
 
 .il-paste-entry {
   grid-area: entry;
-  min-height: 206px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   padding: 14px;
@@ -220,7 +264,7 @@ a:hover { text-decoration: underline; }
 
 .il-import-settings {
   grid-area: settings;
-  min-height: 206px;
+  min-height: 0;
   display: flex;
   padding: 14px;
   border: 1px solid var(--border-soft);
@@ -243,7 +287,8 @@ a:hover { text-decoration: underline; }
   margin: 0;
   font-family: var(--font-display);
   font-size: var(--text-h2);
-  font-weight: var(--weight-regular);
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.01em;
   line-height: var(--leading-tight);
   color: var(--text-primary);
 }
@@ -257,28 +302,88 @@ a:hover { text-decoration: underline; }
   letter-spacing: var(--tracking-label);
 }
 
-.il-link-textarea {
+/* Compact multi-link chip field (replaces the paste textarea). Wraps chips and
+   scrolls internally past ~3 rows, so adding many links costs no extra space. */
+.il-chips-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 6px;
   width: 100%;
-  min-height: 92px;
   flex: 1 1 auto;
+  min-height: 44px;
+  max-height: 112px;
+  overflow-y: auto;
   box-sizing: border-box;
   margin-top: 8px;
-  resize: vertical;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-hairline);
   background: var(--surface-panel);
   box-shadow: var(--shadow-inset);
-  font-family: var(--font-typewriter);
-  font-size: var(--text-sm);
-  color: var(--text-primary);
-  outline: none;
+  cursor: text;
 }
 
-.il-link-textarea:focus {
+.il-chips-field:focus-within {
   border-color: var(--accent-primary);
   box-shadow: var(--shadow-inset), var(--ring-focus);
 }
+
+.il-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 4px 0 9px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(180deg, #EAF3FB 0%, #D2E4F2 100%);
+  border: 1px solid var(--border-lcd-soft);
+  box-shadow: var(--gloss-top), 0 1px 1px rgba(17, 17, 17, 0.05);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--text-lcd);
+  max-width: 220px;
+}
+
+.il-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.il-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  flex: none;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+}
+
+.il-chip-remove:hover {
+  background: #ffffff;
+}
+
+.il-chip-input {
+  flex: 1 1 90px;
+  min-width: 90px;
+  height: 22px;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: var(--font-typewriter);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.il-chip-input::placeholder { color: var(--text-secondary); }
+
+.il-chip-input[aria-invalid="true"] { color: var(--status-error); }
 
 .il-link-actions {
   display: flex;
@@ -396,7 +501,7 @@ a:hover { text-decoration: underline; }
 }
 
 .il-output-controls-compact .il-preset-grid {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -594,8 +699,7 @@ a:hover { text-decoration: underline; }
     min-height: 0;
   }
 
-  .il-link-textarea {
-    min-height: 78px;
+  .il-chips-field {
     flex: none;
   }
 
@@ -635,7 +739,8 @@ a:hover { text-decoration: underline; }
 .il-workflow h2 {
   font-family: var(--font-display);
   font-size: var(--text-h3);
-  font-weight: var(--weight-regular);
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.01em;
   line-height: var(--leading-tight);
   margin: 0;
 }

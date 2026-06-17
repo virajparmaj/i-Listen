@@ -183,7 +183,7 @@ export function LibraryView({ tracks, pattern, avoidOverwrite = true, locked = f
       <Card style={{ padding: 0, overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "13px 18px", borderBottom: "1px solid var(--border-soft)", background: "var(--grad-chrome)" }}>
           <Icon name="note" size={18} />
-          <span style={{ fontFamily: "var(--font-display)", fontWeight: "var(--weight-regular)", fontSize: "var(--text-h3)", lineHeight: "var(--leading-tight)" }}>Converted library</span>
+          <span style={{ fontFamily: "var(--font-display)", fontWeight: "var(--weight-semibold)", fontSize: "var(--text-h3)", letterSpacing: "-0.01em", lineHeight: "var(--leading-tight)" }}>Converted library</span>
           <span style={{ marginLeft: "auto", fontFamily: "var(--font-typewriter)", fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>{done.length} tracks</span>
         </div>
         {done.length === 0 ? (
@@ -208,7 +208,7 @@ export function LibraryView({ tracks, pattern, avoidOverwrite = true, locked = f
         )}
       </Card>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16, position: "sticky", top: 4, alignSelf: "start" }}>
         <Card>
           <div className="il-label" style={{ marginBottom: 10 }}>Preview player</div>
           {selectedTrack ? (
@@ -275,11 +275,19 @@ export function LibraryView({ tracks, pattern, avoidOverwrite = true, locked = f
         </Card>
         <Card>
           <div className="il-label" style={{ marginBottom: 10 }}>Folder structure</div>
-          {done.length ? <FolderTree tracks={done} pattern={pattern} avoidOverwrite={avoidOverwrite} /> : <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>No converted files yet.</div>}
+          {done.length ? (
+            <div className="il-scroll" style={{ maxHeight: 300, overflowY: "auto", paddingRight: 4 }}>
+              <FolderTree tracks={done} pattern={pattern} avoidOverwrite={avoidOverwrite} />
+            </div>
+          ) : <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>No converted files yet.</div>}
         </Card>
         <Card>
           <div className="il-label" style={{ marginBottom: 10 }}>Playlists</div>
-          {done.length ? <PlaylistTree tracks={done} /> : <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>No playlist exports yet.</div>}
+          {done.length ? (
+            <div className="il-scroll" style={{ maxHeight: 220, overflowY: "auto", paddingRight: 4 }}>
+              <PlaylistTree tracks={done} />
+            </div>
+          ) : <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>No playlist exports yet.</div>}
         </Card>
         <Card>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

@@ -12,7 +12,7 @@ export function Queue({ tracks, onEdit, onArt, onDownload, onRetry, onRemove, on
     <Card className="il-queue-card" style={{ padding: 0, overflow: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "13px 18px", borderBottom: "1px solid var(--border-soft)", background: "var(--grad-chrome)" }}>
         <Icon name="queue" size={18} />
-          <span style={{ fontFamily: "var(--font-display)", fontWeight: "var(--weight-regular)", fontSize: "var(--text-h3)", lineHeight: "var(--leading-tight)" }}>Conversion queue</span>
+          <span style={{ fontFamily: "var(--font-display)", fontWeight: "var(--weight-semibold)", fontSize: "var(--text-h3)", letterSpacing: "-0.01em", lineHeight: "var(--leading-tight)" }}>Conversion queue</span>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ fontFamily: "var(--font-typewriter)", fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
             {done} done{failed ? ` · ${failed} failed` : ""} · {tracks.length} total
@@ -28,7 +28,7 @@ export function Queue({ tracks, onEdit, onArt, onDownload, onRetry, onRemove, on
           <div style={{ fontSize: "var(--text-sm)" }}>Paste YouTube links above to prepare iPod-ready files.</div>
         </div>
       ) : (
-        <div className="il-queue-list">
+        <div className="il-queue-list il-scroll">
           {tracks.map((t, i) => (
             <QueueRow
               key={t.id}

@@ -48,9 +48,9 @@ export function BrandMark({
             className="il-brandmark-wordmark"
             style={{
               fontFamily: "var(--font-deco)",
-              fontSize: 20,
-              fontWeight: "var(--weight-regular)",
-              letterSpacing: "var(--tracking-wide)",
+              fontSize: 19,
+              fontWeight: "var(--weight-semibold)",
+              letterSpacing: "-0.01em",
               color: "inherit",
               whiteSpace: "nowrap",
             }}

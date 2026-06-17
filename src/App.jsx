@@ -124,7 +124,7 @@ export default function App() {
       />
       <LocalHelperPanel helper={helper} />
 
-      <main className="il-app-main">
+      <main className="il-app-main il-scroll">
         {tab === "Convert" && (
           <div className="il-convert-grid">
             <div className="il-convert-main">
