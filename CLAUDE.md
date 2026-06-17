@@ -16,6 +16,58 @@ This file is the durable context handoff for new Claude/Codex chats working in t
 - Finder/iPod sync happens through the device entry `Viraj Parmar's iPod`, not the plain mounted disk `/Volumes/iPod`.
 - `/Volumes/iPod` is storage-only for loose files; copying files there does not update the iPod music database.
 
+## UI Design System (Apple-2010 restyle, 2026-06-16)
+
+Styling is a hand-built CSS-variable system — **no Tailwind, no shadcn**. Tokens live in
+`src/styles/tokens.css`, layout in `src/styles/global.css`, custom UI kit in
+`src/components/ui/`. Aesthetic target: authentic early-2010s Apple (iTunes 10 / iPod
+Classic / Aqua skeuomorphism).
+
+- **Type:** one Apple sans stack (`Lucida Grande, Helvetica Neue, ...`) drives all UI. The
+  former decorative aliases (`--font-display/-deco/-script/-typewriter`) now all point at
+  `--font-ui`, so class/inline usages inherit it without per-component edits. `--font-lcd`
+  (VT323) is kept **only** for the iPod LCD readout; `--font-terminal` for the logs panel.
+  `index.html` now loads only VT323 from Google Fonts.
+- **Aqua gel:** `--grad-primary`/`--grad-select` + `--gloss-aqua` give glassy blue buttons;
+  primary/danger buttons are pill-shaped (`Button.jsx` per-variant `radius`). Badges are
+  glossy lozenges (`Badge.jsx`). Chrome/graphite gradients refined to brushed metal.
+- **App-shell scroll model (important):** `.il-desktop` is capped to the viewport
+  (`height:100dvh; overflow:hidden`); `main.il-app-main` is the scroll container
+  (`overflow-y:auto`, themed via `il-scroll`). The Convert queue scrolls **inside its card**
+  (`.il-queue-list { min-height:0; overflow-y:auto }` + `il-scroll`) instead of growing the
+  page. The side-rail no longer stretches (`align-self:flex-start`, Export card is
+  content-sized). `--topbar-h` (56px) anchors sticky/fixed offsets.
+- **Wide-monitor layout pass (same day):** added `--content-wide` (1600px); the Convert
+  grid, Library grid, and Sync view are centered at that width (`margin-inline:auto`) so big
+  monitors look intentional instead of edge-to-edge stretched. **Sync's old hard
+  `maxWidth:1080` cap was removed** (it wasted half a wide screen) — it now uses
+  `--content-wide`. Long lists are bounded scroll boxes (`il-scroll` + `max-height`): the
+  Library folder/playlist trees (`LibraryView.jsx`) and the Sync Tracks list
+  (`SyncView.jsx`); the Library sidebar is sticky. No new sidebars were added — the existing
+  Convert right-rail and Library sidebar already cover that need.
+- **Link-chips input + crush fix (same day):** the Convert "Import YouTube links" card was
+  collapsing to thin strips with a full queue — `.il-import-card` has `overflow:hidden`, so
+  its flex auto-min hit 0 and the tall queue crushed it. Fixed with `.il-import-card { flex: 0
+  0 auto }` (it keeps its natural height; the queue section absorbs/scrolls). The paste
+  textarea was replaced by a compact chip field: `src/components/LinkChipsInput.jsx` (paste →
+  one removable pill per link, ✕ to remove, dedupe, internal scroll) backed by
+  `src/utils/links.js` (`extractYouTubeLinks`/`isYouTubeUrl`/`mergeLinks`/`linkLabel`, tested
+  in `links.test.js`). `PastePanel` now holds `links` as a `string[]` and calls
+  `onAdd(links.join("\n"))`. The quality preset is now 2-up (compact) so the card stays short.
+  Verified against the live 140-track queue: card stays full-height, queue scrolls internally.
+- **Sync declutter + 2-col tracks (same day):** trimmed the Sync prose to minimal essentials —
+  the "How songs reach your iPod" explainer is now two one-line chips (`IpodExplainer.jsx`),
+  the device-panel instructions are shortened and the redundant disk-warning box removed
+  (`IpodDevicePanel.jsx`), the playlist hint is one line (`PlaylistStructurePanel.jsx`), and
+  the Finder checklist is 3 terse steps instead of 7 (`SyncView.jsx`). The "Tracks" list is
+  now a 2-column grid (`.il-track-grid` in `global.css`, collapses to 1 col under 860px) for
+  denser viewing. No facts dropped — the iPod-vs-disk distinction and the Erase-and-Sync
+  warning are preserved in minimal form.
+- Verified after the restyle + layout + chips + Sync-declutter passes: `npm run lint` clean,
+  `npm test` 15 files / 88 pass, `npm run build` ok (~258 kB JS / ~75 kB gzip). No
+  server/DB/Apple-Music code touched.
+- `.claude/launch.json` added for the Claude preview tool (Vite dev on port 5173).
+
 ## Implemented Workflow
 
 The intended workflow is:
