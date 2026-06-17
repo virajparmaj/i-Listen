@@ -3,19 +3,21 @@ import { Card } from "./ui/Card.jsx";
 import { Button } from "./ui/Button.jsx";
 import { Icon } from "./ui/Icon.jsx";
 import { BrandMark } from "./ui/BrandMark.jsx";
+import { LinkChipsInput } from "./LinkChipsInput.jsx";
 
 /** Paste links + primary conversion CTA. */
 export function PastePanel({ onAdd, onConvert, queueCount = 0, helper, outputControls = null }) {
-  const [links, setLinks] = React.useState("");
+  const [links, setLinks] = React.useState([]);
   const [busy, setBusy] = React.useState(false);
   const [converting, setConverting] = React.useState(false);
-  const count = links.split("\n").filter((l) => l.trim()).length;
+  const count = links.length;
 
   const add = async () => {
+    if (!count) return;
     setBusy(true);
     try {
-      const n = await onAdd(links);
-      if (n > 0) setLinks("");
+      const n = await onAdd(links.join("\n"));
+      if (n > 0) setLinks([]);
     } finally {
       setBusy(false);
     }
@@ -57,14 +59,7 @@ export function PastePanel({ onAdd, onConvert, queueCount = 0, helper, outputCon
           </div>
 
           <label className="il-label" htmlFor="links">Paste links</label>
-          <textarea
-            id="links"
-            className="il-link-textarea"
-            value={links}
-            onChange={(e) => setLinks(e.target.value)}
-            spellCheck={false}
-            placeholder="https://youtube.com/watch?v=..."
-          />
+          <LinkChipsInput inputId="links" value={links} onChange={setLinks} />
           <div className="il-link-actions">
             <Button variant="secondary" size="sm" iconLeft={<Icon name="paste" size={13} />} onClick={add} disabled={!count || busy}>
               Add to queue
