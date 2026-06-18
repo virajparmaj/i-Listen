@@ -97,6 +97,10 @@ export async function organizeJobs(items) {
   });
 }
 
+export async function aiApproveJob(id) {
+  return request(`/jobs/${id}/ai-approve`, { method: "POST", body: "{}" });
+}
+
 export async function startJob(id) {
   return request(`/jobs/${id}/start`, { method: "POST", body: "{}" });
 }

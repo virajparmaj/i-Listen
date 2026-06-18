@@ -5,7 +5,7 @@ import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { addLog, createJobs, createJobsFromMatches, existingTrackKeys, getJob, getState, listJobs, listLogs, openDatabase, removeJob, setState, trackKey, updateJob } from "./lib/db.js";
+import { addLog, addMetadataExample, createJobs, createJobsFromMatches, existingTrackKeys, getJob, getState, listJobs, listLogs, listMetadataExamples, openDatabase, removeJob, setState, trackKey, updateJob } from "./lib/db.js";
 import { JobRunner, writePlaylists } from "./lib/converter.js";
 import { parseLibraryXml } from "./lib/libraryXml.js";
 import { searchTracks } from "./lib/youtubeSearch.js";
@@ -15,6 +15,7 @@ import { cleanupStaleIlistenPlaylists, classifyOsascriptError, handoffToAppleMus
 import { detectIpods, verifyIpodVolume } from "./lib/ipod.js";
 import { appendFileLog } from "./lib/filelog.js";
 import { organizeExport } from "./lib/organize.js";
+import { DEFAULT_METADATA_MODEL, DEFAULT_OLLAMA_URL, proposeAiMetadata } from "./lib/metadataAi.js";
 import { detectTools } from "./lib/tools.js";
 import { DEFAULT_PROJECT_PATH, ensureProject } from "./lib/paths.js";
 import { splitYoutubeUrls } from "./lib/youtube.js";
@@ -258,6 +259,140 @@ const METADATA_KEYS = [
 
 function metaTouched(patch) {
   return Object.keys(patch || {}).some((key) => METADATA_KEYS.includes(key));
+}
+
+function isoNow() {
+  return new Date().toISOString();
+}
+
+function metadataExample(job = {}) {
+  return Object.fromEntries(METADATA_KEYS
+    .filter((key) => key !== "customCoverPath")
+    .map((key) => [key, key === "playlists" ? job.playlists || [] : job[key] || ""]));
+}
+
+function proposalForClient(proposal = {}) {
+  return {
+    metadata: proposal.metadata || {},
+    confidence: proposal.confidence ?? null,
+    sources: proposal.sources || [],
+    model: proposal.model || "",
+    usedFallback: Boolean(proposal.usedFallback),
+    parseError: proposal.parseError || "",
+  };
+}
+
+async function runAiApprove(state, job) {
+  const model = process.env.ILISTEN_METADATA_MODEL || DEFAULT_METADATA_MODEL;
+  const ollamaUrl = process.env.ILISTEN_OLLAMA_URL || DEFAULT_OLLAMA_URL;
+  const propose = state.proposeAiMetadata || proposeAiMetadata;
+  const organize = state.organizeExport || organizeExport;
+  const startedAt = isoNow();
+
+  updateJob(state.db, job.id, {
+    aiMetadataStatus: "running",
+    aiMetadataModel: model,
+    aiMetadataConfidence: null,
+    aiMetadataSources: [],
+    aiMetadataError: "",
+    aiMetadataUpdatedAt: startedAt,
+    lastError: "",
+  });
+  addLog(state.db, `AI metadata cleanup started for ${job.title}.`, null, "AI:");
+  emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+
+  let proposal;
+  try {
+    proposal = await propose(job, {
+      tools: state.tools,
+      project: state.project,
+      examples: listMetadataExamples(state.db, 8),
+      model,
+      ollamaUrl,
+    });
+  } catch (error) {
+    const failed = updateJob(state.db, job.id, {
+      metadataReviewStatus: "needs_review",
+      aiMetadataStatus: "failed",
+      aiMetadataModel: model,
+      aiMetadataConfidence: null,
+      aiMetadataSources: [],
+      aiMetadataError: error.message,
+      aiMetadataUpdatedAt: isoNow(),
+      lastError: error.message,
+    });
+    addLog(state.db, `AI metadata failed for ${job.title}: ${error.message}`, "err", "AI:");
+    emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+    return { proposal: null, result: { id: job.id, ok: false, error: error.message }, job: failed };
+  }
+
+  try {
+    const organized = await organize({ project: state.project, tools: state.tools, job, metadata: proposal.metadata });
+    if (!organized.ok) {
+      const failed = updateJob(state.db, job.id, {
+        ...organized.metadataPatch,
+        outputPath: organized.path || job.outputPath,
+        exportStatus: "invalid",
+        metadataReviewStatus: "needs_review",
+        aiMetadataStatus: "failed",
+        aiMetadataModel: proposal.model || model,
+        aiMetadataConfidence: proposal.confidence,
+        aiMetadataSources: proposal.sources,
+        aiMetadataError: organized.error,
+        aiMetadataUpdatedAt: isoNow(),
+        lastError: organized.error,
+      });
+      addLog(state.db, `AI organize failed for ${job.title}: ${organized.error}`, "err", "AI:");
+      emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+      return { proposal: proposalForClient(proposal), result: { id: job.id, ok: false, error: organized.error }, job: failed };
+    }
+
+    const updated = updateJob(state.db, job.id, {
+      ...organized.metadataPatch,
+      outputPath: organized.path,
+      exportStatus: "validated",
+      metadataStatus: organized.validation.metadataStatus,
+      artworkStatus: organized.validation.artworkStatus,
+      durationSec: organized.validation.durationSec,
+      sizeBytes: organized.validation.sizeBytes,
+      metadataReviewStatus: "approved",
+      appleMusicImportStatus: "pending",
+      appleMusicPlaylistStatus: "pending",
+      readyForFinderSync: 0,
+      syncState: "",
+      musicPersistentId: "",
+      lastError: "",
+      aiMetadataStatus: "approved",
+      aiMetadataModel: proposal.model || model,
+      aiMetadataConfidence: proposal.confidence,
+      aiMetadataSources: proposal.sources,
+      aiMetadataError: "",
+      aiMetadataUpdatedAt: isoNow(),
+    });
+    addMetadataExample(state.db, {
+      jobId: job.id,
+      source: "ai_approval",
+      input: { before: metadataExample(job), sources: proposal.sources || [] },
+      output: proposal.metadata,
+    });
+    addLog(state.db, `AI approved and organized ${updated.artist} — ${updated.title}.`, "ok", "AI:");
+    emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+    return { proposal: proposalForClient(proposal), result: { id: job.id, ok: true, path: organized.path }, job: updated };
+  } catch (error) {
+    const failed = updateJob(state.db, job.id, {
+      metadataReviewStatus: "needs_review",
+      aiMetadataStatus: "failed",
+      aiMetadataModel: proposal.model || model,
+      aiMetadataConfidence: proposal.confidence,
+      aiMetadataSources: proposal.sources,
+      aiMetadataError: error.message,
+      aiMetadataUpdatedAt: isoNow(),
+      lastError: error.message,
+    });
+    addLog(state.db, `AI metadata error for ${job.title}: ${error.message}`, "err", "AI:");
+    emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+    return { proposal: proposalForClient(proposal), result: { id: job.id, ok: false, error: error.message }, job: failed };
+  }
 }
 
 /**
@@ -520,6 +655,29 @@ export async function route(req, res, state, allowedOrigins) {
     const [, id, action] = jobMatch;
     const job = getJob(state.db, id);
 
+    if (req.method === "POST" && action === "ai-approve") {
+      if (!job) {
+        send(res, req, allowedOrigins, 404, { error: "Job not found" });
+        return;
+      }
+      if (job.status !== "complete" || !job.outputPath) {
+        send(res, req, allowedOrigins, 400, { error: "Track must be converted before AI metadata approval." });
+        return;
+      }
+      if (!state.tools?.ffmpeg?.ok || !state.tools?.ffprobe?.ok) {
+        send(res, req, allowedOrigins, 409, { error: "ffmpeg and ffprobe are required to organize and retag exports." });
+        return;
+      }
+
+      const outcome = await runAiApprove(state, job);
+      send(res, req, allowedOrigins, 200, {
+        ...outcome,
+        jobs: listJobs(state.db),
+        logs: listLogs(state.db),
+      });
+      return;
+    }
+
     if (req.method === "PATCH" && !action) {
       const body = await readJson(req);
       const before = getJob(state.db, id);
@@ -532,6 +690,14 @@ export async function route(req, res, state, allowedOrigins) {
         patch.syncState = "";
       }
       const job = updateJob(state.db, id, patch);
+      if (before && before.status === "complete" && metaTouched(body)) {
+        addMetadataExample(state.db, {
+          jobId: id,
+          source: "manual_edit",
+          input: { before: metadataExample(before) },
+          output: metadataExample(job),
+        });
+      }
       emit(state, { type: "jobs", jobs: listJobs(state.db) });
       send(res, req, allowedOrigins, 200, { job, jobs: listJobs(state.db) });
       if (before && before.status === "complete" && metaTouched(body)) void runRetag(state, id);

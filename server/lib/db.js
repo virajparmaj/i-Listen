@@ -42,6 +42,12 @@ const JOB_FIELDS = {
   musicPersistentId: "music_persistent_id",
   sourceBatch: "source_batch",
   metadataReviewStatus: "metadata_review_status",
+  aiMetadataStatus: "ai_metadata_status",
+  aiMetadataModel: "ai_metadata_model",
+  aiMetadataConfidence: "ai_metadata_confidence",
+  aiMetadataSources: "ai_metadata_sources",
+  aiMetadataError: "ai_metadata_error",
+  aiMetadataUpdatedAt: "ai_metadata_updated_at",
 };
 
 function now() {
@@ -81,6 +87,12 @@ function migrateSchema(db) {
   addColumnIfMissing(db, "jobs", "music_persistent_id", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(db, "jobs", "source_batch", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(db, "jobs", "metadata_review_status", "TEXT NOT NULL DEFAULT 'pending'");
+  addColumnIfMissing(db, "jobs", "ai_metadata_status", "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, "jobs", "ai_metadata_model", "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, "jobs", "ai_metadata_confidence", "REAL");
+  addColumnIfMissing(db, "jobs", "ai_metadata_sources", "TEXT NOT NULL DEFAULT '[]'");
+  addColumnIfMissing(db, "jobs", "ai_metadata_error", "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, "jobs", "ai_metadata_updated_at", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(db, "logs", "category", "TEXT NOT NULL DEFAULT 'general'");
 }
 
@@ -161,6 +173,15 @@ export function openDatabase(dbPath) {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL DEFAULT ''
     );
+
+    CREATE TABLE IF NOT EXISTS metadata_examples (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_id TEXT NOT NULL DEFAULT '',
+      source TEXT NOT NULL,
+      input_json TEXT NOT NULL DEFAULT '{}',
+      output_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL
+    );
   `);
   migrateSchema(db);
   backfillPlaylists(db);
@@ -224,6 +245,12 @@ export function jobFromRow(row) {
     musicPersistentId: row.music_persistent_id || "",
     sourceBatch: row.source_batch || "",
     metadataReviewStatus: row.metadata_review_status || "pending",
+    aiMetadataStatus: row.ai_metadata_status || "",
+    aiMetadataModel: row.ai_metadata_model || "",
+    aiMetadataConfidence: Number.isFinite(row.ai_metadata_confidence) ? row.ai_metadata_confidence : null,
+    aiMetadataSources: parsePlaylists(row.ai_metadata_sources || "[]"),
+    aiMetadataError: row.ai_metadata_error || "",
+    aiMetadataUpdatedAt: row.ai_metadata_updated_at || "",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -324,6 +351,8 @@ export function updateJob(db, id, patch) {
   const assignments = entries.map(([key]) => `${JOB_FIELDS[key]} = ?`);
   const values = entries.map(([key, value]) => {
     if (key === "playlists") return JSON.stringify(customPlaylists(value));
+    if (key === "aiMetadataSources") return JSON.stringify(normalizePlaylists(value));
+    if (key === "aiMetadataConfidence") return value == null || value === "" ? null : Number(value);
     return value ?? "";
   });
   assignments.push("updated_at = ?");
@@ -363,4 +392,42 @@ export function addLog(db, msg, kind = null, label = null, category = "general")
 
 export function listLogs(db, limit = 250) {
   return db.prepare("SELECT t, kind, label, msg, category FROM logs ORDER BY id DESC LIMIT ?").all(limit).reverse();
+}
+
+function safeJson(value, fallback) {
+  try {
+    return JSON.parse(value || "");
+  } catch {
+    return fallback;
+  }
+}
+
+export function addMetadataExample(db, { jobId = "", source, input = {}, output = {} }) {
+  const createdAt = now();
+  db.prepare(`
+    INSERT INTO metadata_examples (job_id, source, input_json, output_json, created_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(
+    String(jobId || ""),
+    String(source || "manual"),
+    JSON.stringify(input || {}),
+    JSON.stringify(output || {}),
+    createdAt
+  );
+  return { jobId, source, input, output, createdAt };
+}
+
+export function listMetadataExamples(db, limit = 8) {
+  return db.prepare(`
+    SELECT job_id, source, input_json, output_json, created_at
+    FROM metadata_examples
+    ORDER BY id DESC
+    LIMIT ?
+  `).all(limit).map((row) => ({
+    jobId: row.job_id,
+    source: row.source,
+    input: safeJson(row.input_json, {}),
+    output: safeJson(row.output_json, {}),
+    createdAt: row.created_at,
+  }));
 }

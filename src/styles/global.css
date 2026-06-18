@@ -137,6 +137,51 @@ a:hover { text-decoration: underline; }
   border-left: 1px solid var(--border-hairline);
 }
 
+.il-sync-track-row {
+  position: relative;
+  overflow: hidden;
+  transition: background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.il-sync-track-row.is-unapproved {
+  background:
+    linear-gradient(180deg, rgba(183, 93, 93, 0.11) 0%, rgba(183, 93, 93, 0.055) 100%);
+}
+
+.il-sync-track-row.is-approved {
+  background:
+    linear-gradient(180deg, rgba(122, 168, 116, 0.12) 0%, rgba(122, 168, 116, 0.055) 100%);
+}
+
+.il-sync-track-row.is-ai-working {
+  background:
+    linear-gradient(180deg, rgba(62, 111, 158, 0.15) 0%, rgba(143, 183, 217, 0.09) 100%);
+  box-shadow: inset 3px 0 0 rgba(62, 111, 158, 0.65);
+}
+
+.il-sync-track-row.is-ai-working::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.42) 48%, transparent 100%);
+  transform: translateX(-100%);
+  animation: il-ai-row-scan 1200ms ease-in-out infinite;
+}
+
+@keyframes il-ai-row-scan {
+  to { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .il-sync-track-row.is-ai-working::after {
+    animation: none;
+    opacity: 0.35;
+    transform: none;
+  }
+}
+
 @media (max-width: 860px) {
   .il-track-grid {
     grid-template-columns: minmax(0, 1fr);

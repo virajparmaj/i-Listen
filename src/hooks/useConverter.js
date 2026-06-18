@@ -9,6 +9,7 @@ import {
 } from "../data/mockData.js";
 import {
   addJobs,
+  aiApproveJob,
   audioUrlForJob,
   cancelJob,
   connectEvents,
@@ -109,6 +110,12 @@ export function mapJob(job, index = 0) {
     syncState: job.syncState || "",
     sourceBatch: job.sourceBatch || "",
     metadataReviewStatus: job.metadataReviewStatus || "pending",
+    aiMetadataStatus: job.aiMetadataStatus || "",
+    aiMetadataModel: job.aiMetadataModel || "",
+    aiMetadataConfidence: job.aiMetadataConfidence ?? null,
+    aiMetadataSources: job.aiMetadataSources || [],
+    aiMetadataError: job.aiMetadataError || "",
+    aiMetadataUpdatedAt: job.aiMetadataUpdatedAt || "",
     lastError: job.lastError || null,
     warning: job.warning || null,
     error: job.error || null,
@@ -391,6 +398,14 @@ export function useConverter() {
     }]);
   }, [approveTracks]);
 
+  const aiApproveTrack = useCallback(async (track) => {
+    if (!helperRef.current.connected) throw new Error("Local helper is not connected.");
+    const id = typeof track === "string" ? track : track.id;
+    const result = await aiApproveJob(id);
+    refreshFromResult(result);
+    return result;
+  }, [refreshFromResult]);
+
   const handoffToAppleMusic = useCallback(async (ids = null) => {
     if (!helperRef.current.connected) throw new Error("Local helper is not connected.");
     const result = await handoffToIpod(ids);
@@ -444,7 +459,7 @@ export function useConverter() {
       start, pause, addFromLinks, updateTrack, applyToAll, removeTrack,
       retry, clearCompleted, resetAll, applyGlobalCover, updateSettings,
       setGlobalCover, pushLog, exportPlaylist,
-      approveTrack, approveTracks, handoffToAppleMusic, cleanupMusicPlaylists, refreshIpod, selectIpod,
+      approveTrack, approveTracks, aiApproveTrack, handoffToAppleMusic, cleanupMusicPlaylists, refreshIpod, selectIpod,
     },
   };
 }

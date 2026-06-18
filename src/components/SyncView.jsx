@@ -80,12 +80,17 @@ function FinderSyncChecklist({ count }) {
   );
 }
 
-function TrackRow({ track, onEdit, onApprove, approving }) {
+function TrackRow({ track, onEdit, onApprove, approving, aiApproving }) {
   const metaTone = track.metadataStatus === "complete" ? "success" : "warning";
   const artTone = track.artworkStatus === "embedded" ? "success" : track.artworkStatus === "external" ? "info" : "warning";
   const approved = track.metadataReviewStatus === "approved";
+  const aiConfidence = Number.isFinite(track.aiMetadataConfidence) ? Math.round(track.aiMetadataConfidence * 100) : null;
   return (
-    <div style={{
+    <div className={[
+      "il-sync-track-row",
+      approved ? "is-approved" : "is-unapproved",
+      aiApproving ? "is-ai-working" : "",
+    ].filter(Boolean).join(" ")} aria-busy={aiApproving ? "true" : "false"} style={{
       display: "flex", alignItems: "center", gap: 12, padding: "10px 12px",
       borderBottom: "1px solid var(--border-hairline)",
     }}>
@@ -103,11 +108,14 @@ function TrackRow({ track, onEdit, onApprove, approving }) {
       <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
         <Badge tone={metaTone}>{track.metadataStatus === "complete" ? "Tags ✓" : "Tags?"}</Badge>
         <Badge tone={artTone}>{track.artworkStatus === "missing" ? "No art" : "Art ✓"}</Badge>
-        <SyncStatusBadge track={track} />
-        <Button size="sm" variant="ghost" onClick={() => onEdit(track)}>Edit</Button>
+        {aiApproving ? <Badge tone="info">AI fixing...</Badge> : <SyncStatusBadge track={track} />}
+        {approved && aiConfidence !== null && track.aiMetadataStatus === "approved" && (
+          <Badge tone="info">AI {aiConfidence}%</Badge>
+        )}
+        <Button size="sm" variant="ghost" disabled={aiApproving} onClick={() => onEdit(track)}>Edit</Button>
         {!approved && (
-          <Button size="sm" variant="secondary" disabled={approving} onClick={() => onApprove(track)}>
-            {approving ? "Approving…" : "Approve"}
+          <Button size="sm" variant="secondary" disabled={approving || aiApproving} onClick={() => onApprove(track)}>
+            {approving ? "Approving..." : "Approve"}
           </Button>
         )}
       </div>
@@ -119,6 +127,8 @@ function TrackRow({ track, onEdit, onApprove, approving }) {
 export function SyncView({ tracks, helper, ipod, actions, onShowToast, onEdit }) {
   const [busy, setBusy] = React.useState(false);
   const [approvingId, setApprovingId] = React.useState("");
+  const [aiApprovingId, setAiApprovingId] = React.useState("");
+  const [aiBatchBusy, setAiBatchBusy] = React.useState(false);
   const [cleanupBusy, setCleanupBusy] = React.useState(false);
   const [blocked, setBlocked] = React.useState(null);
   const { refreshIpod } = actions;
@@ -183,6 +193,38 @@ export function SyncView({ tracks, helper, ipod, actions, onShowToast, onEdit })
       onShowToast(error.message);
     } finally {
       setApprovingId("");
+    }
+  };
+
+  const onAiApproveAll = async () => {
+    if (!helper.connected) {
+      onShowToast("Connect the local helper first.");
+      return;
+    }
+    if (!needsReview.length) {
+      onShowToast("All converted tracks are already approved.");
+      return;
+    }
+
+    setAiBatchBusy(true);
+    let approvedCount = 0;
+    let failedCount = 0;
+    try {
+      for (const track of needsReview) {
+        setAiApprovingId(track.id);
+        try {
+          const result = await actions.aiApproveTrack(track);
+          if (result.result?.ok === false) failedCount += 1;
+          else approvedCount += 1;
+        } catch {
+          failedCount += 1;
+        }
+      }
+      if (failedCount) onShowToast(`AI approved ${approvedCount}; ${failedCount} need another pass.`);
+      else onShowToast(`AI approved ${approvedCount} track${approvedCount === 1 ? "" : "s"}.`);
+    } finally {
+      setAiApprovingId("");
+      setAiBatchBusy(false);
     }
   };
 
@@ -252,6 +294,15 @@ export function SyncView({ tracks, helper, ipod, actions, onShowToast, onEdit })
         <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border-hairline)", display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-body-lg)" }}>Tracks</span>
           <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={aiBatchBusy || !helper.connected || !needsReview.length}
+              iconLeft={<Icon name="prefs" size={13} />}
+              onClick={onAiApproveAll}
+            >
+              {aiBatchBusy ? "AI approving..." : needsReview.length ? `AI approve ${needsReview.length} unreviewed` : "AI approvals done"}
+            </Button>
             <Badge tone={needsReview.length ? "warning" : "success"}>{needsReview.length ? `${needsReview.length} need review` : `${approved.length} approved`}</Badge>
             <Badge tone="neutral">{complete.length} converted</Badge>
           </span>
@@ -266,6 +317,7 @@ export function SyncView({ tracks, helper, ipod, actions, onShowToast, onEdit })
                   onEdit={onEdit}
                   onApprove={onApprove}
                   approving={approvingId === track.id}
+                  aiApproving={aiApprovingId === track.id}
                 />
               ))}
             </div>

@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { addLog, createJobs, getState, listJobs, listLogs, openDatabase, setState, updateJob } from "./db.js";
+import { addLog, addMetadataExample, createJobs, getState, listJobs, listLogs, listMetadataExamples, openDatabase, setState, updateJob } from "./db.js";
 
 let tempDir = null;
 
@@ -52,12 +52,21 @@ describe("pipeline status + migration", () => {
       appleMusicPlaylistStatus: "added",
       artworkStatus: "embedded",
       metadataReviewStatus: "approved",
+      aiMetadataStatus: "approved",
+      aiMetadataModel: "llama3:latest",
+      aiMetadataConfidence: 0.86,
+      aiMetadataSources: ["ollama", "musicbrainz"],
+      aiMetadataError: "",
     });
     expect(updated.disc).toBe("1");
     expect(updated.exportStatus).toBe("validated");
     expect(updated.readyForFinderSync).toBe(1);
     expect(updated.appleMusicPlaylistStatus).toBe("added");
     expect(updated.metadataReviewStatus).toBe("approved");
+    expect(updated.aiMetadataStatus).toBe("approved");
+    expect(updated.aiMetadataModel).toBe("llama3:latest");
+    expect(updated.aiMetadataConfidence).toBe(0.86);
+    expect(updated.aiMetadataSources).toEqual(["ollama", "musicbrainz"]);
 
     const reset = updateJob(db, job.id, { readyForFinderSync: 0 });
     expect(reset.readyForFinderSync).toBe(0);
@@ -89,5 +98,23 @@ describe("pipeline status + migration", () => {
     addLog(db, "handoff line", "ok", "Sync:", "applemusic");
     const logs = listLogs(db);
     expect(logs[logs.length - 1].category).toBe("applemusic");
+  });
+
+  it("stores metadata correction examples for future fine-tuning", () => {
+    const db = tempDb();
+    addMetadataExample(db, {
+      jobId: "job-1",
+      source: "ai_approval",
+      input: { before: { title: "Messy" } },
+      output: { title: "Clean" },
+    });
+
+    const examples = listMetadataExamples(db);
+    expect(examples[0]).toMatchObject({
+      jobId: "job-1",
+      source: "ai_approval",
+      input: { before: { title: "Messy" } },
+      output: { title: "Clean" },
+    });
   });
 });

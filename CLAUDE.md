@@ -168,6 +168,15 @@ Clean exported file paths for this batch:
 - `src/hooks/useConverter.js`: frontend helper actions.
 - `src/utils/localHelper.js`: HTTP client for local helper endpoints.
 
+Local AI metadata auto-approval:
+
+- `server/lib/metadataAi.js`: builds metadata context, calls local Ollama structured JSON, sanitizes/falls back proposals.
+- `server/lib/musicBrainz.js`: polite MusicBrainz recording search/ranking (1 request/sec default, meaningful User-Agent).
+- `server/lib/acoustid.js`: optional `fpcalc` + AcoustID lookup when `ILISTEN_ACOUSTID_CLIENT_KEY` is set.
+- `server/lib/db.js`: AI metadata run fields plus `metadata_examples` correction store for later fine-tuning.
+- `server/index.js`: `POST /jobs/:id/ai-approve`; injectable `state.proposeAiMetadata`/`state.organizeExport` for tests.
+- `src/components/SyncView.jsx`: `AI approve ... unreviewed` batch button and per-row working animation/state.
+
 Convert-with-XML feature (Apple Music library import):
 
 - `server/lib/libraryXml.js`: parses an Apple Music `Library.xml` (plist) into `{ playlists, tracksById }`; mirrors vault-verse's `LibraryXMLParser.swift` (skips `Master`/`Distinguished Kind` playlists, 200 MB cap, friendly errors). Uses the `plist` npm package.
@@ -193,6 +202,8 @@ Convert-with-XML feature (Apple Music library import):
 - Apple Music handoff now defaults to pending/new-or-changed approved tracks only; if everything approved is already in `iPod Sync`, `/ipod/handoff` returns a successful no-op with `message: "Nothing new to add; sync in Finder."`.
 - The Sync tab now separates pending Apple Music handoff from tracks already ready for Finder sync and shows a compact Finder checklist once tracks are in `iPod Sync`.
 - Added "Convert with XML" mode (`Import` tab). New endpoints: `POST /library/parse` (upload `Library.xml` → playlists + tracks, each annotated `existing` for dedup), `POST /library/search` (YouTube search per track → ranked candidates + confidence; injectable via `state.searchTracks` for tests), `POST /library/import` (create jobs from approved matches seeded with clean XML metadata + playlist names, then auto-start conversion through a 2-wide pool unless `autoStart:false`). XML metadata wins over YouTube-inferred metadata because the conversion pipeline only overwrites placeholder fields. Each selected XML playlist becomes a `job.playlists` entry, so the existing Apple Music handoff recreates it under the `iListen` folder + `iPod Sync`. Imported tracks still pass through the normal `needs_review → approved` organize step before handoff.
+- Added local AI metadata approval (`POST /jobs/:id/ai-approve`). It requires a completed export, generates a local Ollama metadata proposal, optionally uses MusicBrainz/AcoustID candidates, then reuses `organizeExport` so approval only turns green after move + retag + validation. Failure leaves the row unapproved with `lastError`.
+- AI metadata env vars: `ILISTEN_OLLAMA_URL` (default `http://127.0.0.1:11434`), `ILISTEN_METADATA_MODEL` (default `llama3:latest`), optional `ILISTEN_ACOUSTID_CLIENT_KEY`, plus optional tool overrides `ILISTEN_OLLAMA` and `ILISTEN_FPCALC`.
 
 ## Verification Baseline
 
@@ -220,6 +231,29 @@ After the Convert-with-XML feature (2026-06-16):
 77 tests passed
 lint passed
 build passed (dist ~257 kB, gzip ~75 kB)
+```
+
+After the Local AI Metadata Auto-Approval feature (2026-06-18):
+
+```text
+npm test → 17 test files passed / 99 tests passed
+npm run lint → passed
+npm run build → passed (dist JS ~260 kB / gzip ~75.6 kB)
+```
+
+No live library, Apple Music, or iPod state was changed during the 2026-06-18 code implementation.
+
+Later on 2026-06-18, local launch/setup docs were added to `README.md`:
+
+```text
+Run Locally now includes brew installs, Ollama `llama3` setup, helper/UI launch, AI metadata env vars, optional AcoustID setup, troubleshooting curls, and `POST /jobs/:id/ai-approve`.
+Verified local services:
+- Ollama API: http://127.0.0.1:11434/api/tags, `llama3:latest` installed
+- Helper: http://127.0.0.1:4317/health, tools ready except optional fpcalc missing
+- Vite UI: http://127.0.0.1:5173/ returned 200 OK
+Commands run: `npm install`, `npm run helper`, `npm run dev -- --host 127.0.0.1`.
+Detached local processes left running after launch: helper PID 19890 (`/tmp/ilisten-helper.log`), Vite PID 20969 (`/tmp/ilisten-vite.log`).
+No live library, Apple Music, or iPod handoff state was intentionally changed; helper startup only opened the existing project.
 ```
 
 End-to-end verified on 2026-06-16 against the real running helper (isolated temp port 4319 + temp project, live project untouched, autoStart:false so nothing downloaded):

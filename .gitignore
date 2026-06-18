@@ -1,45 +1,117 @@
 ## Dependencies
 node_modules/
+jspm_packages/
+
+## Package-manager state and caches
+.npm/
+.pnpm-store/
+.yarn/*
+!.yarn/releases/
+!.yarn/plugins/
+!.yarn/sdks/
+!.yarn/versions/
+.pnp.*
 
 ## Build output
 dist/
+dist-ssr/
+build/
+out/
 .vite/
-coverage/
+vite.config.*.timestamp-*
+vite.config.*.mjs
 
-## Logs
+## Test, lint, and coverage artifacts
+coverage/
+.coverage/
+.nyc_output/
+.eslintcache
+*.tsbuildinfo
+
+## Logs and process files
+logs/
 *.log
+*.pid
+*.pid.lock
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-## Local environment
+## Local environment and secrets
 .env
 .env.*
 !.env.example
+!.env.sample
+*.local
 
 ## Local helper / database state
 *.sqlite
+*.sqlite3
 *.sqlite-shm
 *.sqlite-wal
 *.db
 *.db-shm
 *.db-wal
+*.db-journal
 
-## Generated media and exports
+## iListen local project output
+iListen Project/
+staging/
+artwork/
 exports/
 reports/
 playlists/
+backups/
+Music Library/
+Library.xml
+*.m3u
+*.m3u8
+
+## Generated media and large local assets
+*.aac
+*.aiff
+*.alac
+*.flac
+*.m4a
+*.m4v
+*.mp3
+*.mp4
+*.ogg
+*.opus
+*.wav
+*.webm
+
+## Temporary files
 tmp/
 temp/
+.tmp/
+.temp/
+*.tmp
+*.temp
+*.bak
+*.backup
 
-## OS / editor clutter
+## OS clutter
 .DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+desktop.ini
+
+## Editor clutter
 .idea/
 .vscode/
+*.code-workspace
 *.swp
 *.swo
+*.swn
+*~
 
 ## AI / local tooling
 .codex/
@@ -48,6 +120,7 @@ Thumbs.db
 .impeccable/
 .impeccable.md
 
-## Test / cache artifacts
-.eslintcache
-*.tsbuildinfo
+## Optional local model / cache drops
+models/
+ollama/
+chromaprint/

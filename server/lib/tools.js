@@ -5,13 +5,24 @@ const TOOL_ENV = {
   ytdlp: "ILISTEN_YTDLP",
   ffmpeg: "ILISTEN_FFMPEG",
   ffprobe: "ILISTEN_FFPROBE",
+  ollama: "ILISTEN_OLLAMA",
+  fpcalc: "ILISTEN_FPCALC",
 };
 
 const TOOL_COMMANDS = {
   ytdlp: ["yt-dlp"],
   ffmpeg: ["ffmpeg"],
   ffprobe: ["ffprobe"],
+  ollama: ["ollama"],
+  fpcalc: ["fpcalc"],
 };
+
+function versionArgs(name) {
+  if (name === "ytdlp") return ["--version"];
+  if (name === "ollama") return ["--version"];
+  if (name === "fpcalc") return ["-version"];
+  return ["-version"];
+}
 
 function commandVersion(path, args) {
   const result = spawnSync(path, args, { encoding: "utf8", timeout: 5000 });
@@ -36,7 +47,7 @@ function resolveTool(name) {
         name,
         path: envPath,
         source: "env",
-        version: commandVersion(envPath, name === "ytdlp" ? ["--version"] : ["-version"]),
+        version: commandVersion(envPath, versionArgs(name)),
       };
     } catch (error) {
       return { ok: false, name, path: envPath, source: "env", error: error.message };
@@ -51,7 +62,7 @@ function resolveTool(name) {
         name,
         path,
         source: "path",
-        version: commandVersion(path, name === "ytdlp" ? ["--version"] : ["-version"]),
+        version: commandVersion(path, versionArgs(name)),
       };
     }
   }
@@ -70,6 +81,8 @@ export function detectTools() {
     ytdlp: resolveTool("ytdlp"),
     ffmpeg: resolveTool("ffmpeg"),
     ffprobe: resolveTool("ffprobe"),
+    ollama: resolveTool("ollama"),
+    fpcalc: resolveTool("fpcalc"),
   };
 
   return {

@@ -57,6 +57,12 @@ describe("job mapping", () => {
       coverPath: "/tmp/artwork/job-1.jpg",
       sourcePath: "",
       sourceCodec: "aac",
+      aiMetadataStatus: "approved",
+      aiMetadataModel: "llama3:latest",
+      aiMetadataConfidence: 0.91,
+      aiMetadataSources: ["ollama", "musicbrainz"],
+      aiMetadataError: "",
+      aiMetadataUpdatedAt: "2026-06-06T12:01:00.000Z",
       updatedAt: "2026-06-06T12:00:00.000Z",
       createdAt: "2026-06-06T11:00:00.000Z",
     });
@@ -65,6 +71,10 @@ describe("job mapping", () => {
     expect(track.audioUrl).toContain("/jobs/job-1/audio");
     expect(track.coverArt).toContain("token=helper-token");
     expect(track.audioUrl).toContain("v=2026-06-06T12%3A00%3A00.000Z");
+    expect(track.aiMetadataStatus).toBe("approved");
+    expect(track.aiMetadataModel).toBe("llama3:latest");
+    expect(track.aiMetadataConfidence).toBe(0.91);
+    expect(track.aiMetadataSources).toEqual(["ollama", "musicbrainz"]);
   });
 
   it("keeps placeholder artwork and no preview URL when helper assets do not exist", () => {

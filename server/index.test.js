@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough, Readable } from "node:stream";
 import { afterEach, describe, expect, it } from "vitest";
-import { createJobs, openDatabase, updateJob } from "./lib/db.js";
+import { createJobs, listMetadataExamples, openDatabase, updateJob } from "./lib/db.js";
 import { createAppState, helperReuseMessage, helperStartupMessage, probeRunningHelper, route, selectAppleMusicHandoffJobs } from "./index.js";
 
 let tempDir = null;
@@ -30,6 +30,17 @@ function createState() {
   state.project = project;
   state.db = openDatabase(project.dbPath);
   return { state, project };
+}
+
+function readyTools() {
+  return {
+    ready: true,
+    ytdlp: { ok: true, path: "yt-dlp" },
+    ffmpeg: { ok: true, path: "ffmpeg" },
+    ffprobe: { ok: true, path: "ffprobe" },
+    ollama: { ok: true, path: "ollama" },
+    fpcalc: { ok: false, path: null },
+  };
 }
 
 function makeReq({ method = "GET", url = "/", headers = {}, body = "" } = {}) {
@@ -383,6 +394,169 @@ describe("iPod sync endpoints", () => {
 
     expect(response.res.statusCode).toBe(200);
     expect(response.json().job.customCoverPath).toMatch(/-custom\.png$/);
+  });
+
+  it("AI-approves a completed track through the organize path", async () => {
+    const { state, project } = createState();
+    state.tools = readyTools();
+    const job = createJobs(state.db, ["https://youtube.com/watch?v=aiok"]).created[0];
+    const outputPath = join(project.exportsDir, "Music Library", "Unknown Artist", "Unknown Album", "01 - Messy.m4a");
+    mkdirSync(join(outputPath, ".."), { recursive: true });
+    writeFileSync(outputPath, Buffer.from("audio"));
+    updateJob(state.db, job.id, {
+      status: "complete",
+      outputPath,
+      metadataReviewStatus: "needs_review",
+    });
+
+    const cleanPath = join(project.exportsDir, "Music Library", "Clean Artist", "Clean Album", "04 - Clean Song.m4a");
+    state.proposeAiMetadata = async () => ({
+      metadata: {
+        title: "Clean Song",
+        artist: "Clean Artist",
+        album: "Clean Album",
+        albumArtist: "Clean Artist",
+        year: "2020",
+        genre: "Pop",
+        track: "4",
+        disc: "1",
+        composer: "",
+        comment: "Cleaned locally",
+        playlists: ["Chill"],
+      },
+      confidence: 0.91,
+      sources: ["ollama", "musicbrainz"],
+      model: "llama3:latest",
+      usedFallback: false,
+    });
+    state.organizeExport = async ({ metadata }) => ({
+      ok: true,
+      path: cleanPath,
+      metadataPatch: metadata,
+      validation: {
+        metadataStatus: "complete",
+        artworkStatus: "embedded",
+        durationSec: 200,
+        sizeBytes: 1000,
+      },
+    });
+
+    const response = await request(state, {
+      method: "POST",
+      url: `/jobs/${job.id}/ai-approve?token=test-token`,
+      body: "{}",
+    });
+
+    expect(response.res.statusCode).toBe(200);
+    const data = response.json();
+    expect(data.result).toMatchObject({ ok: true, path: cleanPath });
+    expect(data.proposal).toMatchObject({ confidence: 0.91, sources: ["ollama", "musicbrainz"] });
+    expect(data.job).toMatchObject({
+      title: "Clean Song",
+      artist: "Clean Artist",
+      metadataReviewStatus: "approved",
+      aiMetadataStatus: "approved",
+      aiMetadataModel: "llama3:latest",
+      aiMetadataConfidence: 0.91,
+      appleMusicPlaylistStatus: "pending",
+    });
+    expect(listMetadataExamples(state.db)[0]).toMatchObject({
+      source: "ai_approval",
+      output: { title: "Clean Song" },
+    });
+  });
+
+  it("rejects AI approval before a track has an output file", async () => {
+    const { state } = createState();
+    state.tools = readyTools();
+    const job = createJobs(state.db, ["https://youtube.com/watch?v=aipending"]).created[0];
+    updateJob(state.db, job.id, { status: "complete", metadataReviewStatus: "needs_review" });
+
+    const response = await request(state, {
+      method: "POST",
+      url: `/jobs/${job.id}/ai-approve?token=test-token`,
+      body: "{}",
+    });
+
+    expect(response.res.statusCode).toBe(400);
+    expect(response.json().error).toMatch(/converted/);
+  });
+
+  it("leaves a row unapproved when the local Ollama model is unavailable", async () => {
+    const { state, project } = createState();
+    state.tools = readyTools();
+    const job = createJobs(state.db, ["https://youtube.com/watch?v=ainomodel"]).created[0];
+    const outputPath = join(project.exportsDir, "Music Library", "Artist", "Album", "01 - Song.m4a");
+    mkdirSync(join(outputPath, ".."), { recursive: true });
+    writeFileSync(outputPath, Buffer.from("audio"));
+    updateJob(state.db, job.id, { status: "complete", outputPath, metadataReviewStatus: "needs_review" });
+    state.proposeAiMetadata = async () => {
+      throw new Error("Ollama metadata model unavailable: connect ECONNREFUSED");
+    };
+
+    const response = await request(state, {
+      method: "POST",
+      url: `/jobs/${job.id}/ai-approve?token=test-token`,
+      body: "{}",
+    });
+
+    expect(response.res.statusCode).toBe(200);
+    const data = response.json();
+    expect(data.result.ok).toBe(false);
+    expect(data.job.metadataReviewStatus).toBe("needs_review");
+    expect(data.job.aiMetadataStatus).toBe("failed");
+    expect(data.job.lastError).toMatch(/Ollama/);
+  });
+
+  it("keeps AI-approved metadata unapproved when organize or retag fails", async () => {
+    const { state, project } = createState();
+    state.tools = readyTools();
+    const job = createJobs(state.db, ["https://youtube.com/watch?v=airetagfail"]).created[0];
+    const outputPath = join(project.exportsDir, "Music Library", "Artist", "Album", "01 - Song.m4a");
+    mkdirSync(join(outputPath, ".."), { recursive: true });
+    writeFileSync(outputPath, Buffer.from("audio"));
+    updateJob(state.db, job.id, { status: "complete", outputPath, metadataReviewStatus: "needs_review" });
+    state.proposeAiMetadata = async () => ({
+      metadata: {
+        title: "Clean Song",
+        artist: "Clean Artist",
+        album: "Clean Album",
+        albumArtist: "Clean Artist",
+        year: "",
+        genre: "",
+        track: "1",
+        disc: "",
+        composer: "",
+        comment: "",
+        playlists: [],
+      },
+      confidence: 0.7,
+      sources: ["ollama"],
+      model: "llama3:latest",
+    });
+    state.organizeExport = async ({ metadata }) => ({
+      ok: false,
+      path: outputPath,
+      metadataPatch: metadata,
+      error: "ffmpeg retag failed",
+    });
+
+    const response = await request(state, {
+      method: "POST",
+      url: `/jobs/${job.id}/ai-approve?token=test-token`,
+      body: "{}",
+    });
+
+    expect(response.res.statusCode).toBe(200);
+    const data = response.json();
+    expect(data.result).toMatchObject({ ok: false, error: "ffmpeg retag failed" });
+    expect(data.job).toMatchObject({
+      title: "Clean Song",
+      metadataReviewStatus: "needs_review",
+      aiMetadataStatus: "failed",
+      exportStatus: "invalid",
+      lastError: "ffmpeg retag failed",
+    });
   });
 });
 

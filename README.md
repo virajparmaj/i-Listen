@@ -23,6 +23,25 @@ Quality note: YouTube-only sources are already compressed. iListen preserves the
 
 ## Run Locally
 
+Install system tools:
+
+```bash
+brew install ffmpeg yt-dlp ollama
+```
+
+Optional fingerprint lookup for the AI metadata fixer:
+
+```bash
+brew install chromaprint
+```
+
+Prepare the local AI model:
+
+```bash
+ollama pull llama3
+ollama list
+```
+
 Install app dependencies:
 
 ```bash
@@ -41,6 +60,12 @@ Start the web UI in another terminal:
 npm run dev
 ```
 
+Open the app:
+
+```text
+http://127.0.0.1:5173/
+```
+
 By default the helper opens a project at:
 
 ```text
@@ -54,6 +79,50 @@ Converted files land in:
 ```
 
 Each track keeps metadata review, approval, file path, and Apple Music handoff status in SQLite. YouTube metadata is only a first pass; final user-facing names should look like normal music-library entries. iListen uses one required Apple Music sync playlist named `iPod Sync` and does not auto-create `iPod - ...` playlists.
+
+## Local AI Metadata Approval
+
+iListen can run a local Ollama model over completed, unapproved tracks and approve them automatically through the normal organize/retag path.
+
+Default AI settings:
+
+```bash
+ILISTEN_OLLAMA_URL=http://127.0.0.1:11434
+ILISTEN_METADATA_MODEL=llama3:latest
+```
+
+Optional AcoustID fingerprint lookup:
+
+```bash
+ILISTEN_ACOUSTID_CLIENT_KEY=your-acoustid-key
+```
+
+Typical local launch:
+
+```bash
+cd /Users/veerr_89/Work/tools/i-Listen
+npm run helper
+```
+
+In another terminal:
+
+```bash
+npm run dev
+```
+
+Then open `http://127.0.0.1:5173/`, go to `Sync`, and click `AI approve X unreviewed`. The app processes one completed/unapproved row at a time, shows a row-specific loading animation, moves/renames the file, retags it, and turns the row green only after approval succeeds.
+
+Troubleshooting checks:
+
+```bash
+curl http://127.0.0.1:11434/api/tags
+curl http://127.0.0.1:4317/health
+which ffmpeg
+which ffprobe
+which yt-dlp
+which ollama
+ollama list
+```
 
 ## Required Converter Tools
 
@@ -91,6 +160,7 @@ Local Vite origins such as `http://localhost:5173` are allowed automatically.
 - `POST /jobs/:id/cancel` - cancels an active job.
 - `POST /jobs/:id/retry` - requeues a failed/canceled job.
 - `POST /jobs/:id/remove` - removes a job.
+- `POST /jobs/:id/ai-approve` - proposes clean local-AI metadata, organizes, retags, and approves a completed track.
 - `POST /jobs/organize` - applies approved metadata, moves/renames files, retags audio, and marks tracks approved.
 - `GET /events` - streams logs and queue updates over SSE.
 - `POST /applemusic/handoff` - adds approved tracks to Apple Music's `iPod Sync` playlist.
