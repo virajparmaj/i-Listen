@@ -174,7 +174,11 @@ export function normalizePlaylists(value) {
 }
 
 export function isAutoPlaylistName(value) {
-  return /^ipod\s*-/i.test(String(value || "").trim());
+  const text = String(value || "").trim();
+  return /^ipod\s*-/i.test(text)
+    || /^source\s*[:=]/i.test(text)
+    || /best available from youtube/i.test(text)
+    || /cannot restore youtube compression/i.test(text);
 }
 
 export function customPlaylists(value) {

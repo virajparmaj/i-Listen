@@ -38,7 +38,7 @@ brew install chromaprint
 Prepare the local AI model:
 
 ```bash
-ollama pull llama3
+ollama pull qwen:1.8b
 ollama list
 ```
 
@@ -88,8 +88,11 @@ Default AI settings:
 
 ```bash
 ILISTEN_OLLAMA_URL=http://127.0.0.1:11434
-ILISTEN_METADATA_MODEL=llama3:latest
+ILISTEN_METADATA_MODEL=qwen:1.8b
+ILISTEN_METADATA_TIMEOUT_MS=45000
 ```
+
+`qwen:1.8b` is the default because it is small enough for an 8 GB M1 MacBook Pro and fast enough to process multiple songs without tying up the helper for minutes. If you want to experiment, other open model options to pull and set explicitly are `gemma3:1b`, `gemma3:4b`, or `qwen:4b`.
 
 Optional AcoustID fingerprint lookup:
 
@@ -101,7 +104,7 @@ Typical local launch:
 
 ```bash
 cd /Users/veerr_89/Work/tools/i-Listen
-npm run helper
+ILISTEN_METADATA_MODEL=qwen:1.8b npm run helper
 ```
 
 In another terminal:
@@ -111,6 +114,20 @@ npm run dev
 ```
 
 Then open `http://127.0.0.1:5173/`, go to `Sync`, and click `AI approve X unreviewed`. The app processes one completed/unapproved row at a time, shows a row-specific loading animation, moves/renames the file, retags it, and turns the row green only after approval succeeds.
+
+The local model is a metadata chooser/normalizer, not the source of truth. iListen first checks compact evidence from current metadata, embedded tags, YouTube title/uploader/duration/date, top MusicBrainz candidates, Apple/iTunes Search candidates, optional AcoustID candidates, and relevant manual correction examples. When MusicBrainz, Apple/iTunes, or AcoustID evidence is strong enough, iListen can approve from that evidence without calling Ollama; ambiguous rows fall back to `qwen:1.8b`. Low-confidence proposals, unknown albums, and titles that do not match the supplied evidence stay in review instead of being auto-approved. The model should choose from supplied evidence when possible, preserve cleaned current metadata when evidence is weak, and avoid invented albums, years, track numbers, or playlists.
+
+Future fine-tuning/evaluation data can be exported from stored manual edits and AI approvals:
+
+```bash
+npm run export:metadata-examples
+```
+
+The default export path is `~/Music/iListen Project/metadata-examples.jsonl`. Use `--project /path/to/project --output /path/to/examples.jsonl` after the npm script delimiter when needed:
+
+```bash
+npm run export:metadata-examples -- --output /tmp/metadata-examples.jsonl
+```
 
 Troubleshooting checks:
 
@@ -123,6 +140,8 @@ which yt-dlp
 which ollama
 ollama list
 ```
+
+If a row or `/health` reports `Local metadata model qwen:1.8b is not installed`, run `ollama pull qwen:1.8b` and retry the AI approval. If you launched the helper with a different `ILISTEN_METADATA_MODEL`, pull that exact model or restart the helper with `ILISTEN_METADATA_MODEL=qwen:1.8b npm run helper`.
 
 ## Required Converter Tools
 
@@ -150,7 +169,7 @@ Local Vite origins such as `http://localhost:5173` are allowed automatically.
 
 ## API Surface
 
-- `GET /health` - helper status, tools, project, jobs, logs.
+- `GET /health` - helper status, tools, AI metadata readiness, project, jobs, logs.
 - `POST /pair` - returns the browser pairing token.
 - `POST /projects/open` - creates/opens the project folder.
 - `POST /jobs` - adds YouTube URLs.

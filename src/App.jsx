@@ -71,6 +71,24 @@ export default function App() {
     actions.updateSettings({ defaultOutput: nextPreset.outputOption });
   };
 
+  const handleRemoveTrack = async (track) => {
+    const alreadyAdded = track.appleMusicPlaylistStatus === "added";
+    const message = [
+      `Delete "${track.title}" by ${track.artist}?`,
+      track.status === "complete"
+        ? "This removes the converted file from your iListen project."
+        : "This removes the queued conversion from your iListen project.",
+      alreadyAdded
+        ? `It may still exist in Apple Music under "${track.playlists?.[0] || "iPod Sync"}" and would need manual cleanup there.`
+        : "",
+    ].filter(Boolean).join("\n\n");
+    if (!window.confirm(message)) return false;
+
+    await actions.removeTrack(track.id);
+    showToast(`Deleted ${track.artist} — ${track.title}.`);
+    return true;
+  };
+
   const toggleSelected = (id) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -166,7 +184,7 @@ export default function App() {
                   onDownload={onDownloadOne}
                   onRetry={(t) => actions.retry(t.id)}
                   onCancel={(t) => actions.pause(t.id)}
-                  onRemove={(t) => actions.removeTrack(t.id)}
+                  onRemove={handleRemoveTrack}
                   onClear={actions.clearCompleted}
                   selectedIds={selectedIds}
                   onToggleSelect={toggleSelected}
@@ -215,6 +233,7 @@ export default function App() {
             actions={actions}
             onShowToast={showToast}
             onEdit={setEditTrack}
+            onRemove={handleRemoveTrack}
           />
         )}
 

@@ -418,12 +418,13 @@ export function addMetadataExample(db, { jobId = "", source, input = {}, output 
 }
 
 export function listMetadataExamples(db, limit = 8) {
-  return db.prepare(`
+  const sql = `
     SELECT job_id, source, input_json, output_json, created_at
     FROM metadata_examples
     ORDER BY id DESC
-    LIMIT ?
-  `).all(limit).map((row) => ({
+  `;
+  const rows = limit == null ? db.prepare(sql).all() : db.prepare(`${sql} LIMIT ?`).all(limit);
+  return rows.map((row) => ({
     jobId: row.job_id,
     source: row.source,
     input: safeJson(row.input_json, {}),

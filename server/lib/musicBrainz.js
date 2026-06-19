@@ -32,9 +32,14 @@ function tokenOverlap(wanted, found) {
 function artistCreditName(credit = []) {
   if (!Array.isArray(credit)) return "";
   return credit
-    .map((item) => clean(item?.name || item?.artist?.name || ""))
+    .map((item) => {
+      const name = clean(item?.name || item?.artist?.name || "");
+      const joinphrase = String(item?.joinphrase || "").replace(/\s+/g, " ");
+      return `${name}${joinphrase}`;
+    })
     .filter(Boolean)
-    .join("");
+    .join("")
+    .trim();
 }
 
 function releaseYear(date) {

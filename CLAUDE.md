@@ -63,6 +63,30 @@ Classic / Aqua skeuomorphism).
   now a 2-column grid (`.il-track-grid` in `global.css`, collapses to 1 col under 860px) for
   denser viewing. No facts dropped — the iPod-vs-disk distinction and the Erase-and-Sync
   warning are preserved in minimal form.
+- **Per-track delete controls (2026-06-18):** faulty conversions can now be deleted from both
+  surfaces the user actually works from: the Convert queue and the Sync "Tracks" grid. Queue
+  rows now show a trash action for completed/queued/failed/skipped/canceled jobs
+  (`QueueRow.jsx`), and Sync rows have a visible `Delete` button (`SyncView.jsx`). The app
+  confirms before destructive deletes (`App.jsx`), and helper-backed deletion now removes the
+  DB row plus any local export/staging/artwork files tied to that job (`server/index.js`).
+  This is intentionally local-project cleanup only; if a track was already handed off to Apple
+  Music, the UI warns that Apple Music cleanup may still be manual.
+- **Queue control sizing follow-up (2026-06-18):** the first delete-controls pass made the
+  Convert queue action cluster too cramped on desktop because the row still reserved only
+  `150px` for actions. `QueueRow.jsx` now uses compact square icon buttons for art/edit/delete
+  and lets the actions column size to `max-content`, which restores the earlier spacing without
+  changing behavior.
+- **Sync top explainer removed (2026-06-18):** the two-chip banner at the top of Sync
+  (`IpodExplainer`) is no longer rendered in `SyncView.jsx`; the page now opens directly on
+  the device/playlists controls.
+- **Finder checklist moved up (2026-06-18):** `Finish in Finder` now sits in the top-right
+  Sync column directly under `Apple Music playlists` instead of as a full-width card lower on
+  the page. This uses the empty space beside the iPod device card and keeps the main handoff
+  section tighter.
+- **Finder checklist sizing follow-up (2026-06-18):** removed the yellow `If Finder asks to
+  Erase and Sync...` warning strip from `Finish in Finder`, and the top Sync two-column layout
+  now stretches so the combined height of the right stack matches the left `Connected iPod`
+  card. `SyncView.jsx` does this by making the right column a full-height `auto + 1fr` stack.
 - Verified after the restyle + layout + chips + Sync-declutter passes: `npm run lint` clean,
   `npm test` 15 files / 88 pass, `npm run build` ok (~258 kB JS / ~75 kB gzip). No
   server/DB/Apple-Music code touched.
@@ -170,10 +194,12 @@ Clean exported file paths for this batch:
 
 Local AI metadata auto-approval:
 
-- `server/lib/metadataAi.js`: builds metadata context, calls local Ollama structured JSON, sanitizes/falls back proposals.
+- `server/lib/metadataAi.js`: builds compact evidence-first metadata context, calls local Ollama structured JSON, sanitizes/falls back proposals.
 - `server/lib/musicBrainz.js`: polite MusicBrainz recording search/ranking (1 request/sec default, meaningful User-Agent).
+- `server/lib/itunes.js`: Apple/iTunes Search lookup/ranking for catalog title/artist/album/year/track/genre evidence; supports fallback queries for noisy YouTube titles.
 - `server/lib/acoustid.js`: optional `fpcalc` + AcoustID lookup when `ILISTEN_ACOUSTID_CLIENT_KEY` is set.
 - `server/lib/db.js`: AI metadata run fields plus `metadata_examples` correction store for later fine-tuning.
+- `server/lib/metadataExamples.js` + `server/scripts/export-metadata-examples.js`: JSONL export of correction examples for later fine-tuning/evaluation.
 - `server/index.js`: `POST /jobs/:id/ai-approve`; injectable `state.proposeAiMetadata`/`state.organizeExport` for tests.
 - `src/components/SyncView.jsx`: `AI approve ... unreviewed` batch button and per-row working animation/state.
 
@@ -203,7 +229,10 @@ Convert-with-XML feature (Apple Music library import):
 - The Sync tab now separates pending Apple Music handoff from tracks already ready for Finder sync and shows a compact Finder checklist once tracks are in `iPod Sync`.
 - Added "Convert with XML" mode (`Import` tab). New endpoints: `POST /library/parse` (upload `Library.xml` → playlists + tracks, each annotated `existing` for dedup), `POST /library/search` (YouTube search per track → ranked candidates + confidence; injectable via `state.searchTracks` for tests), `POST /library/import` (create jobs from approved matches seeded with clean XML metadata + playlist names, then auto-start conversion through a 2-wide pool unless `autoStart:false`). XML metadata wins over YouTube-inferred metadata because the conversion pipeline only overwrites placeholder fields. Each selected XML playlist becomes a `job.playlists` entry, so the existing Apple Music handoff recreates it under the `iListen` folder + `iPod Sync`. Imported tracks still pass through the normal `needs_review → approved` organize step before handoff.
 - Added local AI metadata approval (`POST /jobs/:id/ai-approve`). It requires a completed export, generates a local Ollama metadata proposal, optionally uses MusicBrainz/AcoustID candidates, then reuses `organizeExport` so approval only turns green after move + retag + validation. Failure leaves the row unapproved with `lastError`.
-- AI metadata env vars: `ILISTEN_OLLAMA_URL` (default `http://127.0.0.1:11434`), `ILISTEN_METADATA_MODEL` (default `llama3:latest`), optional `ILISTEN_ACOUSTID_CLIENT_KEY`, plus optional tool overrides `ILISTEN_OLLAMA` and `ILISTEN_FPCALC`.
+- AI metadata is evidence-first: strong MusicBrainz, Apple/iTunes, or AcoustID evidence can approve through an `evidence-only` shortcut without calling Ollama; ambiguous rows use compact current metadata/tags, YouTube title/uploader/duration/date, top 3 MusicBrainz candidates, top 3 Apple/iTunes candidates, top 3 AcoustID candidates, and relevant manual correction examples with the local model. It should choose/normalize from evidence instead of inventing album/year/track values. Low-confidence proposals, unresolved albums, and titles unsupported by source/catalog evidence stay in `needs_review`.
+- AI metadata env vars: `ILISTEN_OLLAMA_URL` (default `http://127.0.0.1:11434`), `ILISTEN_METADATA_MODEL` (default `qwen:1.8b`), `ILISTEN_METADATA_TIMEOUT_MS` (default `45000`), optional `ILISTEN_ACOUSTID_CLIENT_KEY`, plus optional tool overrides `ILISTEN_OLLAMA` and `ILISTEN_FPCALC`.
+- `/health` includes cached `aiMetadata` readiness (`ok`, model, error, approval timeout, 5000 ms preflight timeout). Timeout failures show `Local metadata model timed out. Try qwen:1.8b or restart Ollama.` and keep the row in `needs_review`.
+- Metadata examples can be exported for later model work with `npm run export:metadata-examples`; default output is `~/Music/iListen Project/metadata-examples.jsonl`.
 
 ## Verification Baseline
 
@@ -233,6 +262,16 @@ lint passed
 build passed (dist ~257 kB, gzip ~75 kB)
 ```
 
+After the delete-controls + artifact-cleanup pass (2026-06-18):
+
+```text
+20 test files passed
+123 tests passed
+lint passed
+build passed (dist ~262 kB, gzip ~76 kB)
+browser verified on local dev server (http://127.0.0.1:4173) with no error overlay or console errors
+```
+
 After the Local AI Metadata Auto-Approval feature (2026-06-18):
 
 ```text
@@ -243,17 +282,81 @@ npm run build → passed (dist JS ~260 kB / gzip ~75.6 kB)
 
 No live library, Apple Music, or iPod state was changed during the 2026-06-18 code implementation.
 
-Later on 2026-06-18, local launch/setup docs were added to `README.md`:
+Later on 2026-06-18, local launch/setup docs were added to `README.md` and then updated for the small-model AI reviewer:
 
 ```text
-Run Locally now includes brew installs, Ollama `llama3` setup, helper/UI launch, AI metadata env vars, optional AcoustID setup, troubleshooting curls, and `POST /jobs/:id/ai-approve`.
+Run Locally now includes brew installs, Ollama `qwen:1.8b` setup, helper/UI launch, AI metadata env vars, optional AcoustID setup, troubleshooting curls, `POST /jobs/:id/ai-approve`, and JSONL metadata-example export.
 Verified local services:
-- Ollama API: http://127.0.0.1:11434/api/tags, `llama3:latest` installed
+- Ollama API: http://127.0.0.1:11434/api/tags was reachable during the earlier launch check; current recommended model is `qwen:1.8b`
 - Helper: http://127.0.0.1:4317/health, tools ready except optional fpcalc missing
 - Vite UI: http://127.0.0.1:5173/ returned 200 OK
 Commands run: `npm install`, `npm run helper`, `npm run dev -- --host 127.0.0.1`.
 Detached local processes left running after launch: helper PID 19890 (`/tmp/ilisten-helper.log`), Vite PID 20969 (`/tmp/ilisten-vite.log`).
 No live library, Apple Music, or iPod handoff state was intentionally changed; helper startup only opened the existing project.
+```
+
+Later on 2026-06-18, Convert and Sync track ordering was changed so the UI surfaces current work instead of the oldest catalog rows:
+
+```text
+src/utils/trackOrdering.js sorts Convert rows by active conversion → queued → failed/canceled → needs review → pending handoff → skipped → finished, newest additions first inside each group.
+src/components/Queue.jsx uses that ordering for the Conversion queue only; backend `listJobs` still returns stable oldest-first data.
+src/components/SyncView.jsx uses Sync ordering: AI-running/needs-review rows, pending Apple Music handoff, then Finder-sync rows, newest first. Batch AI approval and the Apple Music handoff button follow the visible order.
+server/index.js preserves explicit `/ipod/handoff` id order, so latest-first Sync handoffs are not snapped back to DB order.
+npm test → 18 test files passed / 103 tests passed
+npm run lint → passed
+npm run build → passed (dist JS 260.96 kB / gzip 75.93 kB)
+No live library, Apple Music, or iPod state was changed during this code implementation.
+```
+
+Later on 2026-06-18, the local AI metadata reviewer was changed for the 8 GB M1 MacBook Pro path:
+
+```text
+Default model changed from llama3:latest to qwen:1.8b; ILISTEN_METADATA_MODEL still overrides it.
+Added ILISTEN_METADATA_TIMEOUT_MS (default 45000) and a short cached /health AI preflight.
+Ollama timeouts now show: "Local metadata model timed out. Try qwen:1.8b or restart Ollama."
+AI context is compact/evidence-first: current metadata, embedded tags, compact YouTube facts, top 3 MusicBrainz, top 3 AcoustID, 5 correction examples.
+Added an evidence-only shortcut: complete high-scoring MusicBrainz/AcoustID candidates skip Ollama entirely, preserving playlists and returning model=evidence-only.
+Correction examples are selected per track from a larger recent pool by title/artist/album overlap, then newest fallback, so prompts train on task-relevant edits instead of arbitrary recent rows.
+AI approvals now store the compact evidence snapshot in metadata_examples.
+Added `npm run export:metadata-examples` to export metadata_examples JSONL for later fine-tuning/evaluation; no training is run in-app.
+npm test -> 19 test files passed / 112 tests passed
+npm run lint -> passed
+npm run build -> passed (dist JS 260.96 kB / gzip 75.93 kB)
+`npm run export:metadata-examples -- --project /tmp/.../project --output /tmp/.../examples.jsonl` -> passed against an isolated temp project (0 examples, empty file)
+No live library, Apple Music, or iPod state was changed during this code implementation.
+Known follow-up: pull `qwen:1.8b` locally with `ollama pull qwen:1.8b`, then try a small AI-approval batch and inspect the exported examples before any future fine-tuning.
+```
+
+Later on 2026-06-18, the local 404 failure from the AI metadata reviewer was fixed:
+
+```text
+Observed live failure: Ollama returned 404 for model=qwen:1.8b because the model had not been installed locally.
+Ran `ollama pull qwen:1.8b`; `ollama list` now includes qwen:1.8b (about 1.1 GB).
+Verified a direct local Ollama `qwen:1.8b` API call returned successfully; no live AI approvals were triggered during verification.
+Model-missing 404s now surface as: "Local metadata model qwen:1.8b is not installed. Run: ollama pull qwen:1.8b" instead of the generic "Ollama returned 404" wrapper.
+The cached /health AI preflight timeout was raised from 750 ms to 5000 ms because qwen:1.8b can take a few seconds to answer even when installed.
+README troubleshooting now includes the exact missing-model recovery step.
+npm test -> 19 test files passed / 115 tests passed
+npm run lint -> passed
+npm run build -> passed (dist JS 260.96 kB / gzip 75.93 kB)
+No live library, Apple Music, or iPod state was intentionally changed during this fix.
+```
+
+Later on 2026-06-18, the AI metadata quality gate was hardened after three rows were auto-approved with copied/wrong metadata:
+
+```text
+Observed problem: Aasa Kooda and Ik Kudi were approved as "Lyrical: Labon Ko"; Labon Ko itself was left as T-Series / Unknown Album / track 141. Bad AI approvals were being stored as correction examples and then reused in the prompt.
+Added Apple/iTunes Search evidence (`server/lib/itunes.js`) with fallback queries for noisy YouTube titles; MusicBrainz artist-credit join phrases now preserve separators.
+AI prompt examples now use only relevant `manual_edit` examples. Prior `ai_approval` examples remain exportable for evaluation/fine-tuning, but are not fed back into the prompt.
+AI auto-approval now blocks low confidence (<65%), unresolved/Unknown Album results, and titles not supported by YouTube/catalog evidence. AI-proposed playlists are ignored; existing source-comment playlists are filtered out.
+Repaired and retagged the three corrupted live rows:
+- Ik Kudi | wolf.cryman & Arpit Bala | Dil Fenk Ke Marunga 2 | 2023 | track 13
+- Aasa Kooda | Sai Abhyankkar & Sai Smriti | Aasa Kooda (From "Think Indie") - Single | 2024 | track 1
+- Labon Ko | Pritam & KK | Bhool Bhulaiyaa (Original Motion Picture Soundtrack) | 2007 | track 2
+The three repaired rows were reset to Apple Music handoff pending so the corrected files can be re-added to `iPod Sync`.
+npm test -> 20 test files passed / 122 tests passed
+npm run lint -> passed
+npm run build -> passed (dist JS 260.96 kB / gzip 75.93 kB)
 ```
 
 End-to-end verified on 2026-06-16 against the real running helper (isolated temp port 4319 + temp project, live project untouched, autoStart:false so nothing downloaded):
@@ -707,6 +810,19 @@ Session note for this later 2026-06-16 Kanye / KIDS SEE GHOSTS cleanup pass:
 - Used the stored artwork already attached to the `Bound 2` row when Apple search would not return the `Yeezus` track cleanly.
 - Used `ffprobe` spot checks after retagging.
 - Did not rerun `npm test`, `npm run lint`, or `npm run build` because no repo code changed in this pass.
+
+Later on 2026-06-18, the Vite dev-server invalid React hook crash was fixed:
+
+```text
+Observed browser failure: "Invalid hook call" / "Cannot read properties of null (reading 'useState')" at useConverter.js, with Vite HMR WebSocket fallback noise.
+Root cause was two concurrent Vite servers sharing port 5173 across address families: one served 127.0.0.1 with one optimized React cache hash, another served ::1/localhost with another. Browser requests could mix main/App/hook modules from both servers, creating two React module identities.
+vite.config.js now binds dev and preview to host 127.0.0.1, port 5173, strictPort:true, HMR host 127.0.0.1, and resolve.dedupe ["react", "react-dom"].
+Stopped the stale duplicate dev processes once they exited, then started one clean `npm run dev` server. Vite now advertises only http://127.0.0.1:5173/.
+npm test -> 20 test files passed / 122 tests passed
+npm run lint -> passed
+npm run build -> passed (dist JS 260.96 kB / gzip 75.93 kB)
+No live library, Apple Music, or iPod state was changed during this fix.
+```
 
 ## Current User-Facing Next Step
 

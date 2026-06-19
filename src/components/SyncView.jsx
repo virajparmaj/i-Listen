@@ -3,11 +3,11 @@ import { Card } from "./ui/Card.jsx";
 import { Badge } from "./ui/Badge.jsx";
 import { Button } from "./ui/Button.jsx";
 import { Icon } from "./ui/Icon.jsx";
-import { IpodExplainer } from "./IpodExplainer.jsx";
 import { IpodDevicePanel } from "./IpodDevicePanel.jsx";
 import { PlaylistStructurePanel } from "./PlaylistStructurePanel.jsx";
 import { ManualFallback } from "./ManualFallback.jsx";
 import { SyncStatusBadge } from "./SyncStatusBadge.jsx";
+import { sortForSyncTracks } from "../utils/trackOrdering.js";
 
 const STEP_LABELS = [
   "Convert video to audio",
@@ -43,7 +43,7 @@ const finderSteps = [
 function FinderSyncChecklist({ count }) {
   if (!count) return null;
   return (
-    <Card style={{ padding: 16 }}>
+    <Card style={{ padding: 16, height: "100%", display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
         <Icon name="done" size={16} color="var(--status-success)" />
         <span style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-body-lg)" }}>Finish in Finder</span>
@@ -63,24 +63,11 @@ function FinderSyncChecklist({ count }) {
       }}>
         {finderSteps.map((step) => <li key={step}>{step}</li>)}
       </ol>
-      <div style={{
-        marginTop: 10,
-        padding: "8px 10px",
-        borderRadius: "var(--radius-sm)",
-        background: "var(--status-warning-soft)",
-        border: "1px solid var(--border-warning)",
-        fontFamily: "var(--font-typewriter)",
-        fontSize: "var(--text-xs)",
-        color: "var(--text-warning-strong)",
-        lineHeight: 1.45,
-      }}>
-        If Finder asks to Erase and Sync, pause before continuing.
-      </div>
     </Card>
   );
 }
 
-function TrackRow({ track, onEdit, onApprove, approving, aiApproving }) {
+function TrackRow({ track, onEdit, onApprove, onRemove, approving, aiApproving, deleting }) {
   const metaTone = track.metadataStatus === "complete" ? "success" : "warning";
   const artTone = track.artworkStatus === "embedded" ? "success" : track.artworkStatus === "external" ? "info" : "warning";
   const approved = track.metadataReviewStatus === "approved";
@@ -105,31 +92,35 @@ function TrackRow({ track, onEdit, onApprove, approving, aiApproving }) {
           {track.artist}{track.album ? ` · ${track.album}` : ""}
         </div>
       </div>
-      <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+      <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
         <Badge tone={metaTone}>{track.metadataStatus === "complete" ? "Tags ✓" : "Tags?"}</Badge>
         <Badge tone={artTone}>{track.artworkStatus === "missing" ? "No art" : "Art ✓"}</Badge>
         {aiApproving ? <Badge tone="info">AI fixing...</Badge> : <SyncStatusBadge track={track} />}
         {approved && aiConfidence !== null && track.aiMetadataStatus === "approved" && (
           <Badge tone="info">AI {aiConfidence}%</Badge>
         )}
-        <Button size="sm" variant="ghost" disabled={aiApproving} onClick={() => onEdit(track)}>Edit</Button>
+        <Button size="sm" variant="ghost" disabled={aiApproving || deleting} onClick={() => onEdit(track)}>Edit</Button>
         {!approved && (
-          <Button size="sm" variant="secondary" disabled={approving || aiApproving} onClick={() => onApprove(track)}>
+          <Button size="sm" variant="secondary" disabled={approving || aiApproving || deleting} onClick={() => onApprove(track)}>
             {approving ? "Approving..." : "Approve"}
           </Button>
         )}
+        <Button size="sm" variant="ghost" disabled={approving || aiApproving || deleting} onClick={() => onRemove(track)} title="Delete conversion">
+          {deleting ? "Deleting..." : "Delete"}
+        </Button>
       </div>
     </div>
   );
 }
 
 /** Step 4 — integrated iPod Sync workflow screen. */
-export function SyncView({ tracks, helper, ipod, actions, onShowToast, onEdit }) {
+export function SyncView({ tracks, helper, ipod, actions, onShowToast, onEdit, onRemove }) {
   const [busy, setBusy] = React.useState(false);
   const [approvingId, setApprovingId] = React.useState("");
   const [aiApprovingId, setAiApprovingId] = React.useState("");
   const [aiBatchBusy, setAiBatchBusy] = React.useState(false);
   const [cleanupBusy, setCleanupBusy] = React.useState(false);
+  const [deletingId, setDeletingId] = React.useState("");
   const [blocked, setBlocked] = React.useState(null);
   const { refreshIpod } = actions;
 
@@ -138,10 +129,11 @@ export function SyncView({ tracks, helper, ipod, actions, onShowToast, onEdit })
   }, [helper.connected, refreshIpod]);
 
   const complete = tracks.filter((t) => t.status === "complete");
-  const needsReview = complete.filter((t) => t.metadataReviewStatus !== "approved");
+  const visibleComplete = sortForSyncTracks(complete);
+  const needsReview = visibleComplete.filter((t) => t.metadataReviewStatus !== "approved");
   const approved = complete.filter((t) => t.metadataReviewStatus === "approved");
   const readyToHandoff = approved.filter((t) => t.outputPath && t.exportStatus !== "invalid");
-  const pendingHandoff = readyToHandoff.filter((t) => t.appleMusicPlaylistStatus !== "added");
+  const pendingHandoff = sortForSyncTracks(readyToHandoff.filter((t) => t.appleMusicPlaylistStatus !== "added"));
   const alreadyInPlaylist = readyToHandoff.filter((t) => t.appleMusicPlaylistStatus === "added");
   const needsFinderSync = alreadyInPlaylist.filter((t) => t.readyForFinderSync || t.syncState === "needs_manual");
   const metaIncomplete = complete.filter((t) => t.metadataStatus !== "complete" || t.artworkStatus === "missing" || t.metadataReviewStatus !== "approved");
@@ -161,7 +153,7 @@ export function SyncView({ tracks, helper, ipod, actions, onShowToast, onEdit })
     }
     setBusy(true);
     try {
-      const result = await actions.handoffToAppleMusic();
+      const result = await actions.handoffToAppleMusic(pendingHandoff.map((track) => track.id));
       if (result.blocked) {
         setBlocked(result);
         onShowToast(result.message);
@@ -243,9 +235,7 @@ export function SyncView({ tracks, helper, ipod, actions, onShowToast, onEdit })
 
   return (
     <div className="il-sync-view" style={{ display: "grid", gap: 16, padding: "4px 0 40px" }}>
-      <IpodExplainer />
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "start" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "stretch" }}>
         <IpodDevicePanel
           ipod={ipod}
           helperConnected={helper.connected}
@@ -253,7 +243,10 @@ export function SyncView({ tracks, helper, ipod, actions, onShowToast, onEdit })
           onSelect={actions.selectIpod}
           onShowToast={onShowToast}
         />
-        <PlaylistStructurePanel tracks={tracks} />
+        <div style={{ display: "grid", gap: 16, gridTemplateRows: "auto minmax(0, 1fr)", height: "100%", minHeight: 0 }}>
+          <PlaylistStructurePanel tracks={tracks} />
+          <FinderSyncChecklist count={needsFinderSync.length} />
+        </div>
       </div>
 
       <Card style={{ padding: 16 }}>
@@ -288,7 +281,6 @@ export function SyncView({ tracks, helper, ipod, actions, onShowToast, onEdit })
       </Card>
 
       <ManualFallback blocked={blocked} onRetry={onHandoff} onShowToast={onShowToast} />
-      <FinderSyncChecklist count={needsFinderSync.length} />
 
       <Card style={{ padding: 0, overflow: "hidden" }}>
         <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border-hairline)", display: "flex", alignItems: "center", gap: 8 }}>
@@ -310,14 +302,23 @@ export function SyncView({ tracks, helper, ipod, actions, onShowToast, onEdit })
         {complete.length ? (
           <div className="il-scroll" style={{ maxHeight: "min(56vh, 560px)", overflowY: "auto" }}>
             <div className="il-track-grid">
-              {complete.map((track) => (
+              {visibleComplete.map((track) => (
                 <TrackRow
                   key={track.id}
                   track={track}
                   onEdit={onEdit}
                   onApprove={onApprove}
+                  onRemove={async (item) => {
+                    setDeletingId(item.id);
+                    try {
+                      await onRemove(item);
+                    } finally {
+                      setDeletingId("");
+                    }
+                  }}
                   approving={approvingId === track.id}
                   aiApproving={aiApprovingId === track.id}
+                  deleting={deletingId === track.id}
                 />
               ))}
             </div>

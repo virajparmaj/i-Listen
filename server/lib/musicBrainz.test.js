@@ -43,6 +43,34 @@ describe("MusicBrainz metadata lookup", () => {
     expect(ranked[0].score).toBeGreaterThan(ranked[1].score);
   });
 
+  it("preserves MusicBrainz artist-credit join phrases", () => {
+    const ranked = rankMusicBrainzRecordings([
+      {
+        id: "joined",
+        title: "Aasa Kooda",
+        length: 215510,
+        "artist-credit": [
+          { name: "Sai Abhyankkar", joinphrase: " & " },
+          { name: "Sai Smriti", joinphrase: "" },
+        ],
+        releases: [{
+          title: "Aasa Kooda",
+          date: "2024-06-13",
+          "artist-credit": [
+            { name: "Sai Abhyankkar", joinphrase: " & " },
+            { name: "Sai Smriti", joinphrase: "" },
+          ],
+          media: [{ position: 1, tracks: [{ number: "1", recording: { id: "joined" } }] }],
+        }],
+      },
+    ], { title: "Aasa Kooda", artist: "Sai Abhyankkar", durationSec: 216 });
+
+    expect(ranked[0]).toMatchObject({
+      artist: "Sai Abhyankkar & Sai Smriti",
+      albumArtist: "Sai Abhyankkar & Sai Smriti",
+    });
+  });
+
   it("searches MusicBrainz with JSON headers and ranks the response", async () => {
     let requestedUrl = "";
     let requestedHeaders = {};

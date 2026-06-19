@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough, Readable } from "node:stream";
@@ -187,6 +187,42 @@ describe("helper asset endpoints", () => {
     expect(health).toBeNull();
   });
 
+  it("includes cached AI metadata readiness in health", async () => {
+    const oldModel = process.env.ILISTEN_METADATA_MODEL;
+    const oldTimeout = process.env.ILISTEN_METADATA_TIMEOUT_MS;
+    delete process.env.ILISTEN_METADATA_MODEL;
+    delete process.env.ILISTEN_METADATA_TIMEOUT_MS;
+
+    try {
+      const { state } = createState();
+      let calls = 0;
+      state.aiMetadataHealthFetch = async (_url, options) => {
+        calls += 1;
+        expect(options.body).toContain("qwen:1.8b");
+        return { ok: true, json: async () => ({ response: "OK" }) };
+      };
+
+      const first = await request(state, { url: "/health" });
+      const second = await request(state, { url: "/health" });
+
+      expect(first.res.statusCode).toBe(200);
+      expect(first.json().aiMetadata).toMatchObject({
+        ok: true,
+        model: "qwen:1.8b",
+        error: "",
+        timeoutMs: 45000,
+        preflightTimeoutMs: 5000,
+      });
+      expect(second.json().aiMetadata.ok).toBe(true);
+      expect(calls).toBe(1);
+    } finally {
+      if (oldModel == null) delete process.env.ILISTEN_METADATA_MODEL;
+      else process.env.ILISTEN_METADATA_MODEL = oldModel;
+      if (oldTimeout == null) delete process.env.ILISTEN_METADATA_TIMEOUT_MS;
+      else process.env.ILISTEN_METADATA_TIMEOUT_MS = oldTimeout;
+    }
+  });
+
   it("serves stored cover art for a completed job", async () => {
     const { state, project } = createState();
     const created = createJobs(state.db, ["https://youtube.com/watch?v=asset-cover"]).created[0];
@@ -251,6 +287,40 @@ describe("helper asset endpoints", () => {
     expect(response.res.headers["Content-Type"]).toBe("audio/mp4");
     expect(response.body().toString("utf8")).toBe("bcd");
   });
+
+  it("deletes a job and removes its local conversion files", async () => {
+    const { state, project } = createState();
+    const created = createJobs(state.db, ["https://youtube.com/watch?v=delete-me"]).created[0];
+    const sourcePath = join(project.stagingDir, `${created.id}.m4a`);
+    const coverPath = join(project.artworkDir, `${created.id}.jpg`);
+    const customCoverPath = join(project.artworkDir, `${created.id}-custom.png`);
+    const outputPath = join(project.exportsDir, "Music Library", "Artist", "Album", "01 - Song.m4a");
+    mkdirSync(join(outputPath, ".."), { recursive: true });
+    writeFileSync(sourcePath, Buffer.from("src"));
+    writeFileSync(coverPath, Buffer.from("art"));
+    writeFileSync(customCoverPath, Buffer.from("custom"));
+    writeFileSync(outputPath, Buffer.from("audio"));
+    updateJob(state.db, created.id, {
+      status: "complete",
+      sourcePath,
+      coverPath,
+      customCoverPath,
+      outputPath,
+    });
+
+    const response = await request(state, {
+      method: "POST",
+      url: `/jobs/${created.id}/remove?token=test-token`,
+      body: "{}",
+    });
+
+    expect(response.res.statusCode).toBe(200);
+    expect(response.json().job.id).toBe(created.id);
+    expect(existsSync(sourcePath)).toBe(false);
+    expect(existsSync(coverPath)).toBe(false);
+    expect(existsSync(customCoverPath)).toBe(false);
+    expect(existsSync(outputPath)).toBe(false);
+  });
 });
 
 describe("iPod sync endpoints", () => {
@@ -266,6 +336,19 @@ describe("iPod sync endpoints", () => {
 
     expect(selected.eligible.map((job) => job.id)).toEqual(["old-1", "old-2", "old-3", "new-1"]);
     expect(selected.pending.map((job) => job.id)).toEqual(["new-1"]);
+  });
+
+  it("preserves explicit handoff id order", () => {
+    const jobs = [
+      { id: "older", status: "complete", outputPath: "/tmp/older.m4a", exportStatus: "validated", metadataReviewStatus: "approved", appleMusicPlaylistStatus: "pending" },
+      { id: "middle", status: "complete", outputPath: "/tmp/middle.m4a", exportStatus: "validated", metadataReviewStatus: "approved", appleMusicPlaylistStatus: "pending" },
+      { id: "newer", status: "complete", outputPath: "/tmp/newer.m4a", exportStatus: "validated", metadataReviewStatus: "approved", appleMusicPlaylistStatus: "pending" },
+    ];
+
+    const selected = selectAppleMusicHandoffJobs(jobs, ["newer", "older"]);
+
+    expect(selected.eligible.map((job) => job.id)).toEqual(["newer", "older"]);
+    expect(selected.pending.map((job) => job.id)).toEqual(["newer", "older"]);
   });
 
   it("rejects an Apple Music handoff when nothing is validated", async () => {
@@ -482,7 +565,7 @@ describe("iPod sync endpoints", () => {
     expect(response.json().error).toMatch(/converted/);
   });
 
-  it("leaves a row unapproved when the local Ollama model is unavailable", async () => {
+  it("leaves a row unapproved with an actionable error when the local model times out", async () => {
     const { state, project } = createState();
     state.tools = readyTools();
     const job = createJobs(state.db, ["https://youtube.com/watch?v=ainomodel"]).created[0];
@@ -491,7 +574,7 @@ describe("iPod sync endpoints", () => {
     writeFileSync(outputPath, Buffer.from("audio"));
     updateJob(state.db, job.id, { status: "complete", outputPath, metadataReviewStatus: "needs_review" });
     state.proposeAiMetadata = async () => {
-      throw new Error("Ollama metadata model unavailable: connect ECONNREFUSED");
+      throw new Error("Local metadata model timed out. Try qwen:1.8b or restart Ollama.");
     };
 
     const response = await request(state, {
@@ -505,7 +588,11 @@ describe("iPod sync endpoints", () => {
     expect(data.result.ok).toBe(false);
     expect(data.job.metadataReviewStatus).toBe("needs_review");
     expect(data.job.aiMetadataStatus).toBe("failed");
-    expect(data.job.lastError).toMatch(/Ollama/);
+    expect(data.job.lastError).toBe("Local metadata model timed out. Try qwen:1.8b or restart Ollama.");
+    const log = data.logs.find((entry) => entry.msg.includes("AI metadata failed"));
+    expect(log.msg).toContain("model=qwen:1.8b");
+    expect(log.msg).toContain("timeout=45000ms");
+    expect(log.msg).toMatch(/elapsed=\d+ms/);
   });
 
   it("keeps AI-approved metadata unapproved when organize or retag fails", async () => {

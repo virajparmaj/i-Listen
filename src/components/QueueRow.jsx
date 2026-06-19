@@ -33,10 +33,12 @@ export function QueueRow({ track, last, onEdit, onArt, onDownload, onRetry, onRe
   const isSkip = track.status === "skipped";
   const isCanceled = track.status === "canceled";
   const inFlight = IN_FLIGHT.includes(track.status);
+  const canDelete = !locked && !inFlight;
+  const iconButtonStyle = { width: 28, padding: 0 };
 
   return (
     <div className="il-queue-row" style={{
-      display: "grid", gridTemplateColumns: "46px minmax(0,1fr) 168px 150px", gap: 14, alignItems: "center",
+      display: "grid", gridTemplateColumns: "46px minmax(0,1fr) 168px max-content", gap: 14, alignItems: "center",
       padding: "12px 18px", borderBottom: last ? "none" : "1px solid var(--border-soft)",
       background: isDone ? "rgba(122,168,116,0.06)" : isFail ? "rgba(183,93,93,0.05)" : "transparent",
     }}>
@@ -77,7 +79,7 @@ export function QueueRow({ track, last, onEdit, onArt, onDownload, onRetry, onRe
         )}
       </div>
 
-      <div className="il-queue-actions" style={{ display: "flex", gap: 6, justifyContent: "flex-end", alignItems: "center" }}>
+      <div className="il-queue-actions" style={{ display: "flex", gap: 6, justifyContent: "flex-end", alignItems: "center", minWidth: "max-content" }}>
         {isDone && (
           <>
             <label title="Select for manifest export" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, cursor: locked ? "not-allowed" : "pointer", opacity: locked ? 0.5 : 1 }}>
@@ -90,18 +92,24 @@ export function QueueRow({ track, last, onEdit, onArt, onDownload, onRetry, onRe
                 style={{ width: 16, height: 16, margin: 0, accentColor: "var(--accent-primary)" }}
               />
             </label>
-            <Button size="sm" variant="ghost" disabled={locked} onClick={() => onArt(track)} title="Cover art"><Icon name="art" size={14} /></Button>
-            <Button size="sm" variant="ghost" disabled={locked} onClick={() => onEdit(track)} title="Edit metadata"><Icon name="prefs" size={14} /></Button>
+            <Button size="sm" variant="ghost" style={iconButtonStyle} disabled={locked} onClick={() => onArt(track)} title="Cover art"><Icon name="art" size={14} /></Button>
+            <Button size="sm" variant="ghost" style={iconButtonStyle} disabled={locked} onClick={() => onEdit(track)} title="Edit metadata"><Icon name="prefs" size={14} /></Button>
             <Button size="sm" variant="secondary" disabled={locked} iconLeft={<Icon name="get" size={13} />} onClick={() => onDownload(track)}>Manifest</Button>
+            <Button size="sm" variant="ghost" style={iconButtonStyle} disabled={!canDelete} onClick={() => onRemove(track)} title="Delete conversion"><Icon name="trash" size={14} color="var(--text-secondary)" /></Button>
           </>
         )}
         {(isFail || isCanceled) && (
-          <Button size="sm" variant="secondary" disabled={locked} onClick={() => onRetry(track)}>Retry</Button>
+          <>
+            <Button size="sm" variant="secondary" disabled={locked} onClick={() => onRetry(track)}>Retry</Button>
+            <Button size="sm" variant="ghost" style={iconButtonStyle} disabled={!canDelete} onClick={() => onRemove(track)} title="Delete conversion"><Icon name="trash" size={14} color="var(--text-secondary)" /></Button>
+          </>
         )}
         {(track.status === "queued" || isSkip || isCanceled) && (
           <>
-            <Button size="sm" variant="ghost" disabled={locked} onClick={() => onEdit(track)} title="Edit metadata"><Icon name="prefs" size={14} /></Button>
-            <Button size="sm" variant="ghost" disabled={locked} onClick={() => onRemove(track)} title="Remove"><Icon name="trash" size={14} color="var(--text-secondary)" /></Button>
+            <Button size="sm" variant="ghost" style={iconButtonStyle} disabled={locked} onClick={() => onEdit(track)} title="Edit metadata"><Icon name="prefs" size={14} /></Button>
+            {!isCanceled && (
+              <Button size="sm" variant="ghost" style={iconButtonStyle} disabled={!canDelete} onClick={() => onRemove(track)} title="Delete conversion"><Icon name="trash" size={14} color="var(--text-secondary)" /></Button>
+            )}
           </>
         )}
         {inFlight && (

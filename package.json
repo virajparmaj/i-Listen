@@ -11,7 +11,8 @@
     "test": "vitest run",
     "typecheck": "echo \"No TypeScript configured for this JavaScript app.\"",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "export:metadata-examples": "node --experimental-sqlite server/scripts/export-metadata-examples.js"
   },
   "dependencies": {
     "plist": "^5.0.0",

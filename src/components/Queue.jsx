@@ -3,10 +3,12 @@ import { Card } from "./ui/Card.jsx";
 import { Button } from "./ui/Button.jsx";
 import { Icon } from "./ui/Icon.jsx";
 import { QueueRow } from "./QueueRow.jsx";
+import { sortForConversionQueue } from "../utils/trackOrdering.js";
 
 export function Queue({ tracks, onEdit, onArt, onDownload, onRetry, onRemove, onCancel, onClear, locked = false, selectedIds = new Set(), onToggleSelect }) {
   const done = tracks.filter((t) => t.status === "complete").length;
   const failed = tracks.filter((t) => t.status === "failed").length;
+  const visibleTracks = sortForConversionQueue(tracks);
 
   return (
     <Card className="il-queue-card" style={{ padding: 0, overflow: "hidden" }}>
@@ -29,11 +31,11 @@ export function Queue({ tracks, onEdit, onArt, onDownload, onRetry, onRemove, on
         </div>
       ) : (
         <div className="il-queue-list il-scroll">
-          {tracks.map((t, i) => (
+          {visibleTracks.map((t, i) => (
             <QueueRow
               key={t.id}
               track={t}
-              last={i === tracks.length - 1}
+              last={i === visibleTracks.length - 1}
               onEdit={onEdit}
               onArt={onArt}
               onDownload={onDownload}

@@ -145,12 +145,12 @@ a:hover { text-decoration: underline; }
 
 .il-sync-track-row.is-unapproved {
   background:
-    linear-gradient(180deg, rgba(183, 93, 93, 0.11) 0%, rgba(183, 93, 93, 0.055) 100%);
+    linear-gradient(180deg, rgba(183, 93, 93, 0.22) 0%, rgba(183, 93, 93, 0.11) 100%);
 }
 
 .il-sync-track-row.is-approved {
   background:
-    linear-gradient(180deg, rgba(122, 168, 116, 0.12) 0%, rgba(122, 168, 116, 0.055) 100%);
+    linear-gradient(180deg, rgba(122, 168, 116, 0.24) 0%, rgba(122, 168, 116, 0.11) 100%);
 }
 
 .il-sync-track-row.is-ai-working {

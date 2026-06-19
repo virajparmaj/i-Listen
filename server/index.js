@@ -1,9 +1,9 @@
 import { createReadStream } from "node:fs";
-import { mkdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { createServer, request as httpRequest } from "node:http";
 import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
-import { extname, join } from "node:path";
+import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { addLog, addMetadataExample, createJobs, createJobsFromMatches, existingTrackKeys, getJob, getState, listJobs, listLogs, listMetadataExamples, openDatabase, removeJob, setState, trackKey, updateJob } from "./lib/db.js";
 import { JobRunner, writePlaylists } from "./lib/converter.js";
@@ -15,12 +15,20 @@ import { cleanupStaleIlistenPlaylists, classifyOsascriptError, handoffToAppleMus
 import { detectIpods, verifyIpodVolume } from "./lib/ipod.js";
 import { appendFileLog } from "./lib/filelog.js";
 import { organizeExport } from "./lib/organize.js";
-import { DEFAULT_METADATA_MODEL, DEFAULT_OLLAMA_URL, proposeAiMetadata } from "./lib/metadataAi.js";
+import {
+  DEFAULT_METADATA_PREFLIGHT_TIMEOUT_MS,
+  checkOllamaMetadataHealth,
+  metadataModelFromEnv,
+  metadataTimeoutMsFromEnv,
+  ollamaUrlFromEnv,
+  proposeAiMetadata,
+} from "./lib/metadataAi.js";
 import { detectTools } from "./lib/tools.js";
 import { DEFAULT_PROJECT_PATH, ensureProject } from "./lib/paths.js";
 import { splitYoutubeUrls } from "./lib/youtube.js";
 
 const PORT = Number(process.env.ILISTEN_PORT || 4317);
+const AI_METADATA_HEALTH_CACHE_MS = 30000;
 
 function parseAllowedOrigins(value = process.env.ILISTEN_ALLOWED_ORIGINS || "") {
   return new Set(String(value)
@@ -37,6 +45,7 @@ export function createAppState() {
     tools: detectTools(),
     runner: null,
     clients: new Set(),
+    aiMetadataHealthCache: null,
   };
 }
 
@@ -118,8 +127,8 @@ function appleMusicEligible(job) {
 }
 
 export function selectAppleMusicHandoffJobs(jobs, ids = null) {
-  const idSet = Array.isArray(ids) ? new Set(ids) : null;
-  const scoped = idSet ? jobs.filter((job) => idSet.has(job.id)) : jobs;
+  const byId = Array.isArray(ids) ? new Map(jobs.map((job) => [job.id, job])) : null;
+  const scoped = byId ? ids.map((id) => byId.get(id)).filter(Boolean) : jobs;
   const eligible = scoped.filter(appleMusicEligible);
   const pending = eligible.filter((job) => job.appleMusicPlaylistStatus !== "added");
   return { eligible, pending };
@@ -282,12 +291,48 @@ function proposalForClient(proposal = {}) {
   };
 }
 
+async function aiMetadataReadiness(state) {
+  const model = metadataModelFromEnv();
+  const ollamaUrl = ollamaUrlFromEnv();
+  const timeoutMs = metadataTimeoutMsFromEnv();
+  const key = `${model}\n${ollamaUrl}`;
+  const nowMs = Date.now();
+  const cached = state.aiMetadataHealthCache;
+  if (cached?.key === key && cached.expiresAt > nowMs) {
+    return { ...cached.value, model, timeoutMs };
+  }
+
+  const preflight = await checkOllamaMetadataHealth({
+    model,
+    ollamaUrl,
+    fetchImpl: state.aiMetadataHealthFetch || fetch,
+    timeoutMs: DEFAULT_METADATA_PREFLIGHT_TIMEOUT_MS,
+  });
+  const value = {
+    ok: preflight.ok,
+    model,
+    error: preflight.error || "",
+    timeoutMs,
+    preflightTimeoutMs: preflight.timeoutMs,
+    elapsedMs: preflight.elapsedMs,
+    checkedAt: isoNow(),
+  };
+  state.aiMetadataHealthCache = {
+    key,
+    value,
+    expiresAt: nowMs + AI_METADATA_HEALTH_CACHE_MS,
+  };
+  return value;
+}
+
 async function runAiApprove(state, job) {
-  const model = process.env.ILISTEN_METADATA_MODEL || DEFAULT_METADATA_MODEL;
-  const ollamaUrl = process.env.ILISTEN_OLLAMA_URL || DEFAULT_OLLAMA_URL;
+  const model = metadataModelFromEnv();
+  const ollamaUrl = ollamaUrlFromEnv();
+  const timeoutMs = metadataTimeoutMsFromEnv();
   const propose = state.proposeAiMetadata || proposeAiMetadata;
   const organize = state.organizeExport || organizeExport;
   const startedAt = isoNow();
+  const startedMs = Date.now();
 
   updateJob(state.db, job.id, {
     aiMetadataStatus: "running",
@@ -306,11 +351,13 @@ async function runAiApprove(state, job) {
     proposal = await propose(job, {
       tools: state.tools,
       project: state.project,
-      examples: listMetadataExamples(state.db, 8),
+      examples: listMetadataExamples(state.db, 25),
       model,
       ollamaUrl,
+      timeoutMs,
     });
   } catch (error) {
+    const elapsedMs = Date.now() - startedMs;
     const failed = updateJob(state.db, job.id, {
       metadataReviewStatus: "needs_review",
       aiMetadataStatus: "failed",
@@ -321,7 +368,7 @@ async function runAiApprove(state, job) {
       aiMetadataUpdatedAt: isoNow(),
       lastError: error.message,
     });
-    addLog(state.db, `AI metadata failed for ${job.title}: ${error.message}`, "err", "AI:");
+    addLog(state.db, `AI metadata failed for ${job.title}: ${error.message} (model=${model}, timeout=${timeoutMs}ms, elapsed=${elapsedMs}ms)`, "err", "AI:");
     emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
     return { proposal: null, result: { id: job.id, ok: false, error: error.message }, job: failed };
   }
@@ -372,7 +419,7 @@ async function runAiApprove(state, job) {
     addMetadataExample(state.db, {
       jobId: job.id,
       source: "ai_approval",
-      input: { before: metadataExample(job), sources: proposal.sources || [] },
+      input: { before: metadataExample(job), evidence: proposal.context || {}, sources: proposal.sources || [] },
       output: proposal.metadata,
     });
     addLog(state.db, `AI approved and organized ${updated.artist} — ${updated.title}.`, "ok", "AI:");
@@ -462,6 +509,53 @@ async function persistArtwork(project, id, dataUrl) {
   return { ok: true, path };
 }
 
+function isWithinDir(filePath, dirPath) {
+  const rel = relative(resolve(dirPath), resolve(filePath));
+  return Boolean(rel) && !rel.startsWith("..") && !isAbsolute(rel);
+}
+
+async function removeFileAndEmptyParents(filePath, rootDir) {
+  try {
+    await stat(filePath);
+  } catch {
+    return false;
+  }
+
+  await rm(filePath, { force: true });
+
+  let current = dirname(filePath);
+  const boundary = resolve(rootDir);
+  while (current !== boundary && isWithinDir(current, boundary)) {
+    const entries = await readdir(current).catch(() => null);
+    if (!entries || entries.length) break;
+    await rm(current, { recursive: true, force: true });
+    current = dirname(current);
+  }
+  return true;
+}
+
+async function removeJobArtifacts(project, job) {
+  const candidates = [
+    [job.outputPath, project.exportsDir],
+    [job.sourcePath, project.stagingDir],
+    [job.coverPath, project.artworkDir],
+    [job.customCoverPath, project.artworkDir],
+  ];
+  const files = new Map();
+
+  candidates.forEach(([filePath, rootDir]) => {
+    if (!filePath || !rootDir) return;
+    if (!isWithinDir(filePath, rootDir)) return;
+    files.set(resolve(filePath), rootDir);
+  });
+
+  const removedPaths = [];
+  for (const [filePath, rootDir] of files.entries()) {
+    if (await removeFileAndEmptyParents(filePath, rootDir)) removedPaths.push(filePath);
+  }
+  return removedPaths;
+}
+
 /**
  * Start a list of jobs in the background through a small concurrency pool so an
  * XML import does not spawn dozens of yt-dlp/ffmpeg processes at once. Failures
@@ -513,11 +607,13 @@ export async function route(req, res, state, allowedOrigins) {
   if (req.method === "GET" && url.pathname === "/health") {
     state.tools = detectTools();
     if (state.runner) state.runner.tools = state.tools;
+    const aiMetadata = await aiMetadataReadiness(state);
     send(res, req, allowedOrigins, 200, {
       ok: true,
       paired: Boolean(state.token),
       project: state.project,
       tools: state.tools,
+      aiMetadata,
       jobs: state.db ? listJobs(state.db) : [],
       logs: state.db ? listLogs(state.db) : [],
     });
@@ -732,9 +828,21 @@ export async function route(req, res, state, allowedOrigins) {
     }
 
     if (req.method === "POST" && action === "remove") {
-      const job = removeJob(state.db, id);
-      emit(state, { type: "jobs", jobs: listJobs(state.db) });
-      send(res, req, allowedOrigins, 200, { job, jobs: listJobs(state.db) });
+      if (!job) {
+        send(res, req, allowedOrigins, 404, { error: "Job not found" });
+        return;
+      }
+      const removedPaths = await removeJobArtifacts(state.project, job);
+      const deleted = removeJob(state.db, id);
+      const fileCount = removedPaths.length;
+      addLog(
+        state.db,
+        `Deleted ${job.artist} — ${job.title}.${fileCount ? ` Removed ${fileCount} local file${fileCount === 1 ? "" : "s"}.` : ""}`,
+        "ok",
+        "Delete:"
+      );
+      emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+      send(res, req, allowedOrigins, 200, { job: deleted, removedPaths, jobs: listJobs(state.db), logs: listLogs(state.db) });
       return;
     }
 

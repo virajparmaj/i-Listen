@@ -321,8 +321,17 @@ export function useConverter() {
   }, [refreshFromResult]);
 
   const removeTrack = useCallback(async (id) => {
-    setTracks((prev) => prev.filter((track) => track.id !== id));
-    if (helperRef.current.connected) await removeJob(id).then(refreshFromResult);
+    if (helperRef.current.connected) {
+      const result = await removeJob(id);
+      refreshFromResult(result);
+      return result;
+    }
+    let removed = null;
+    setTracks((prev) => {
+      removed = prev.find((track) => track.id === id) || null;
+      return prev.filter((track) => track.id !== id);
+    });
+    return { job: removed };
   }, [refreshFromResult]);
 
   const retry = useCallback(async (id) => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inferTrackMetadata, normalizePlaylists, playlistsToText } from "./metadata.js";
+import { customPlaylists, inferTrackMetadata, normalizePlaylists, playlistsToText } from "./metadata.js";
 
 describe("metadata inference", () => {
   it("splits common Artist - Title YouTube titles and creates artist playlists", () => {
@@ -120,5 +120,14 @@ describe("metadata inference", () => {
   it("normalizes manually typed playlist names", () => {
     expect(normalizePlaylists("iPod - Chill, iPod - Night\n iPod - Chill")).toEqual(["iPod - Chill", "iPod - Night"]);
     expect(playlistsToText(["iPod - A", "iPod - B"])).toBe("iPod - A, iPod - B");
+  });
+
+  it("filters generated playlist names and source comments from custom playlists", () => {
+    expect(customPlaylists([
+      "Chill",
+      "iPod - Artist",
+      "source:youtube; best available from youtube",
+      "This cannot restore YouTube compression.",
+    ])).toEqual(["Chill"]);
   });
 });
