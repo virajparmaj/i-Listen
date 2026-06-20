@@ -12,7 +12,8 @@
     "typecheck": "echo \"No TypeScript configured for this JavaScript app.\"",
     "build": "vite build",
     "preview": "vite preview",
-    "export:metadata-examples": "node --experimental-sqlite server/scripts/export-metadata-examples.js"
+    "export:metadata-examples": "node --experimental-sqlite server/scripts/export-metadata-examples.js",
+    "repair:ai-artwork": "node --experimental-sqlite server/scripts/repair-ai-artwork.js"
   },
   "dependencies": {
     "plist": "^5.0.0",

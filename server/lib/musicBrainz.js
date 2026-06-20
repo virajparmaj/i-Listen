@@ -79,6 +79,7 @@ export function metadataFromRecording(recording = {}) {
 
   return {
     id: recording.id || "",
+    releaseId: release.id || "",
     title: clean(recording.title),
     artist,
     album: clean(release.title),

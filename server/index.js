@@ -15,6 +15,7 @@ import { cleanupStaleIlistenPlaylists, classifyOsascriptError, handoffToAppleMus
 import { detectIpods, verifyIpodVolume } from "./lib/ipod.js";
 import { appendFileLog } from "./lib/filelog.js";
 import { organizeExport } from "./lib/organize.js";
+import { downloadCatalogArtwork } from "./lib/catalogArtwork.js";
 import {
   DEFAULT_METADATA_PREFLIGHT_TIMEOUT_MS,
   checkOllamaMetadataHealth,
@@ -331,6 +332,7 @@ async function runAiApprove(state, job) {
   const timeoutMs = metadataTimeoutMsFromEnv();
   const propose = state.proposeAiMetadata || proposeAiMetadata;
   const organize = state.organizeExport || organizeExport;
+  const fetchArtwork = state.fetchCatalogArtwork || downloadCatalogArtwork;
   const startedAt = isoNow();
   const startedMs = Date.now();
 
@@ -374,7 +376,31 @@ async function runAiApprove(state, job) {
   }
 
   try {
-    const organized = await organize({ project: state.project, tools: state.tools, job, metadata: proposal.metadata });
+    const artwork = await fetchArtwork({
+      project: state.project,
+      job,
+      metadata: proposal.metadata,
+      context: proposal.context || {},
+      fetchImpl: state.catalogArtworkFetch || fetch,
+    });
+    if (!artwork.ok) {
+      const failed = updateJob(state.db, job.id, {
+        metadataReviewStatus: "needs_review",
+        aiMetadataStatus: "failed",
+        aiMetadataModel: proposal.model || model,
+        aiMetadataConfidence: proposal.confidence,
+        aiMetadataSources: proposal.sources,
+        aiMetadataError: artwork.error,
+        aiMetadataUpdatedAt: isoNow(),
+        lastError: artwork.error,
+      });
+      addLog(state.db, `AI metadata held for ${job.title}: ${artwork.error}`, "warn", "AI:");
+      emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+      return { proposal: proposalForClient(proposal), result: { id: job.id, ok: false, error: artwork.error }, job: failed };
+    }
+
+    const metadata = { ...proposal.metadata, customCoverPath: artwork.path };
+    const organized = await organize({ project: state.project, tools: state.tools, job, metadata });
     if (!organized.ok) {
       const failed = updateJob(state.db, job.id, {
         ...organized.metadataPatch,
@@ -420,7 +446,7 @@ async function runAiApprove(state, job) {
       jobId: job.id,
       source: "ai_approval",
       input: { before: metadataExample(job), evidence: proposal.context || {}, sources: proposal.sources || [] },
-      output: proposal.metadata,
+      output: metadata,
     });
     addLog(state.db, `AI approved and organized ${updated.artist} — ${updated.title}.`, "ok", "AI:");
     emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
@@ -638,7 +664,7 @@ export async function route(req, res, state, allowedOrigins) {
     if (action === "cover") {
       if (!requireProject(req, res, state, allowedOrigins)) return;
       const job = getJob(state.db, id);
-      await serveJobAsset(req, res, state, allowedOrigins, job, job?.coverPath, "cover");
+      await serveJobAsset(req, res, state, allowedOrigins, job, job?.customCoverPath || job?.coverPath, "cover");
       return;
     }
 

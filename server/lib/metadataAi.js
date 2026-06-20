@@ -159,7 +159,7 @@ function compactYoutubeInfo(info = null, job = {}) {
 }
 
 function compactCandidate(candidate = {}) {
-  return compactObject(candidate, ["source", "score", "titleScore", "artistScore", "durationScore", "id", "title", "artist", "album", "albumArtist", "year", "genre", "track", "disc", "durationSec"], { maxLength: 180 });
+  return compactObject(candidate, ["source", "score", "titleScore", "artistScore", "durationScore", "id", "releaseId", "title", "artist", "album", "albumArtist", "year", "genre", "track", "disc", "durationSec", "artworkUrl"], { maxLength: 600 });
 }
 
 function compactEvidenceForExample(evidence = {}) {

@@ -93,6 +93,68 @@ const CLEAN_STALE_PLAYLISTS_SCRIPT = `tell application "Music"
   return removedNames as text
 end tell`;
 
+const REFRESH_TRACK_SCRIPT = `on run argv
+  set p to item 1 of argv
+  set pid to item 2 of argv
+  set titleText to item 3 of argv
+  set artistText to item 4 of argv
+  set albumText to item 5 of argv
+  set albumArtistText to item 6 of argv
+  set yearText to item 7 of argv
+  set trackText to item 8 of argv
+  set discText to item 9 of argv
+  set artPath to item 10 of argv
+  tell application "Music"
+    set foundTrack to missing value
+    if pid is not "" then
+      try
+        set matches to (every file track of library playlist 1 whose persistent ID is pid)
+        if (count of matches) > 0 then set foundTrack to item 1 of matches
+      end try
+    end if
+    if foundTrack is missing value then
+      repeat with t in (every file track of library playlist 1)
+        try
+          set loc to location of t
+          if loc is not missing value and (POSIX path of loc) is p then
+            set foundTrack to t
+            exit repeat
+          end if
+        end try
+      end repeat
+    end if
+    if foundTrack is missing value then return ("FAILED" & tab & p & tab & pid & tab & "track not found")
+
+    if titleText is not "" then set name of foundTrack to titleText
+    if artistText is not "" then set artist of foundTrack to artistText
+    if albumText is not "" then set album of foundTrack to albumText
+    if albumArtistText is not "" then set album artist of foundTrack to albumArtistText
+    if yearText is not "" then
+      try
+        set year of foundTrack to (yearText as integer)
+      end try
+    end if
+    if trackText is not "" then
+      try
+        set track number of foundTrack to (trackText as integer)
+      end try
+    end if
+    if discText is not "" then
+      try
+        set disc number of foundTrack to (discText as integer)
+      end try
+    end if
+    if artPath is not "" then
+      try
+        set data of artwork 1 of foundTrack to (read (POSIX file artPath) as picture)
+      on error e number n
+        return ("FAILED" & tab & p & tab & pid & tab & (e & " [" & n & "]"))
+      end try
+    end if
+    return ("UPDATED" & tab & p & tab & pid & tab & "")
+  end tell
+end run`;
+
 /**
  * Run an AppleScript source via osascript, reading the script from stdin and
  * passing args as `on run argv`. Resolves with trimmed stdout on success.
@@ -150,6 +212,36 @@ export async function addToPlaylist(playlistName, paths) {
 export async function cleanupStaleIlistenPlaylists() {
   const { stdout } = await runOsascript(CLEAN_STALE_PLAYLISTS_SCRIPT, []);
   return stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+}
+
+function firstNumber(value) {
+  const n = parseInt(String(value || "").split("/")[0], 10);
+  return Number.isFinite(n) ? String(n) : "";
+}
+
+export async function refreshAppleMusicTrack(job, { artworkPath = job.customCoverPath || "" } = {}) {
+  const { stdout } = await runOsascript(REFRESH_TRACK_SCRIPT, [
+    job.outputPath || "",
+    job.musicPersistentId || "",
+    job.title || "",
+    job.artist || "",
+    job.album || "",
+    job.albumArtist || job.artist || "",
+    firstNumber(job.year),
+    firstNumber(job.track),
+    firstNumber(job.disc),
+    artworkPath || "",
+  ]);
+  return parseResultLines(stdout).get(job.outputPath) || { status: "failed", persistentId: job.musicPersistentId || "", reason: "No result from Music." };
+}
+
+export async function refreshAppleMusicTracks(jobs) {
+  const results = [];
+  for (const job of jobs) {
+    const result = await refreshAppleMusicTrack(job);
+    results.push({ id: job.id, path: job.outputPath, ...result });
+  }
+  return results;
 }
 
 function sortKey(job) {

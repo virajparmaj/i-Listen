@@ -58,7 +58,7 @@ function assetVersionForJob(job) {
 export function mapJob(job, index = 0) {
   const output = outputFor(job.outputOption);
   const assetVersion = assetVersionForJob(job);
-  const coverArt = job.coverPath ? coverArtUrlForJob(job.id, assetVersion) : null;
+  const coverArt = (job.customCoverPath || job.coverPath) ? coverArtUrlForJob(job.id, assetVersion) : null;
   const audioUrl = job.outputPath ? audioUrlForJob(job.id, assetVersion) : null;
   return {
     id: job.id,

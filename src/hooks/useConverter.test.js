@@ -111,4 +111,26 @@ describe("job mapping", () => {
     expect(track.audioUrl).toBeNull();
     expect(track.size).toBe("After conversion");
   });
+
+  it("uses trusted custom/catalog art as a cover asset source", () => {
+    const track = mapJob({
+      id: "job-3",
+      url: "https://youtube.com/watch?v=demo-3",
+      outputOption: "best-youtube",
+      title: "Song Three",
+      artist: "Artist",
+      album: "Album",
+      albumArtist: "Artist",
+      playlists: [],
+      progress: 100,
+      status: "complete",
+      outputPath: "",
+      coverPath: "",
+      customCoverPath: "/tmp/artwork/job-3-catalog.jpg",
+      updatedAt: "2026-06-06T12:00:00.000Z",
+      createdAt: "2026-06-06T11:00:00.000Z",
+    });
+
+    expect(track.coverArt).toContain("/jobs/job-3/cover");
+  });
 });

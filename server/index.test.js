@@ -239,6 +239,23 @@ describe("helper asset endpoints", () => {
     expect(response.body()).toEqual(Buffer.from([0xff, 0xd8, 0xff, 0xdb]));
   });
 
+  it("serves trusted custom/catalog art before the original downloaded thumbnail", async () => {
+    const { state, project } = createState();
+    const created = createJobs(state.db, ["https://youtube.com/watch?v=asset-custom-cover"]).created[0];
+    const coverPath = join(project.artworkDir, "cover.jpg");
+    const customCoverPath = join(project.artworkDir, "cover-custom.jpg");
+    writeFileSync(coverPath, Buffer.from([0xff, 0xd8, 0xff, 0xdb]));
+    writeFileSync(customCoverPath, Buffer.from([0xff, 0xd8, 0xff, 0xee]));
+    updateJob(state.db, created.id, { status: "complete", coverPath, customCoverPath });
+
+    const response = await request(state, {
+      url: `/jobs/${created.id}/cover?token=test-token`,
+    });
+
+    expect(response.res.statusCode).toBe(200);
+    expect(response.body()).toEqual(Buffer.from([0xff, 0xd8, 0xff, 0xee]));
+  });
+
   it("serves local helper assets without requiring a pairing token", async () => {
     const { state, project } = createState();
     const created = createJobs(state.db, ["https://youtube.com/watch?v=asset-open"]).created[0];
@@ -528,17 +545,28 @@ describe("iPod sync endpoints", () => {
       model: "llama3:latest",
       usedFallback: false,
     });
-    state.organizeExport = async ({ metadata }) => ({
+    const catalogPath = join(project.artworkDir, `${job.id}-catalog.jpg`);
+    let organizedMetadata = null;
+    state.fetchCatalogArtwork = async ({ metadata }) => ({
       ok: true,
-      path: cleanPath,
-      metadataPatch: metadata,
-      validation: {
-        metadataStatus: "complete",
-        artworkStatus: "embedded",
-        durationSec: 200,
-        sizeBytes: 1000,
-      },
+      path: catalogPath,
+      source: "itunes",
+      metadata,
     });
+    state.organizeExport = async ({ metadata }) => {
+      organizedMetadata = metadata;
+      return {
+        ok: true,
+        path: cleanPath,
+        metadataPatch: metadata,
+        validation: {
+          metadataStatus: "complete",
+          artworkStatus: "embedded",
+          durationSec: 200,
+          sizeBytes: 1000,
+        },
+      };
+    };
 
     const response = await request(state, {
       method: "POST",
@@ -557,12 +585,67 @@ describe("iPod sync endpoints", () => {
       aiMetadataStatus: "approved",
       aiMetadataModel: "llama3:latest",
       aiMetadataConfidence: 0.91,
+      customCoverPath: catalogPath,
       appleMusicPlaylistStatus: "pending",
     });
+    expect(organizedMetadata.customCoverPath).toBe(catalogPath);
     expect(listMetadataExamples(state.db)[0]).toMatchObject({
       source: "ai_approval",
-      output: { title: "Clean Song" },
+      output: { title: "Clean Song", customCoverPath: catalogPath },
     });
+  });
+
+  it("holds AI approval in review when trusted catalog artwork is missing", async () => {
+    const { state, project } = createState();
+    state.tools = readyTools();
+    const job = createJobs(state.db, ["https://youtube.com/watch?v=ainoart"]).created[0];
+    const outputPath = join(project.exportsDir, "Music Library", "Artist", "Album", "01 - Song.m4a");
+    mkdirSync(join(outputPath, ".."), { recursive: true });
+    writeFileSync(outputPath, Buffer.from("audio"));
+    updateJob(state.db, job.id, { status: "complete", outputPath, metadataReviewStatus: "needs_review" });
+    state.proposeAiMetadata = async () => ({
+      metadata: {
+        title: "Clean Song",
+        artist: "Clean Artist",
+        album: "Clean Album",
+        albumArtist: "Clean Artist",
+        year: "2020",
+        genre: "",
+        track: "1",
+        disc: "",
+        composer: "",
+        comment: "",
+        playlists: [],
+      },
+      confidence: 0.88,
+      sources: ["itunes", "evidence-shortcut"],
+      model: "evidence-only",
+    });
+    state.fetchCatalogArtwork = async () => ({
+      ok: false,
+      error: "Trusted catalog artwork was not found. Review artwork manually.",
+    });
+    let organized = false;
+    state.organizeExport = async () => {
+      organized = true;
+      return { ok: true };
+    };
+
+    const response = await request(state, {
+      method: "POST",
+      url: `/jobs/${job.id}/ai-approve?token=test-token`,
+      body: "{}",
+    });
+
+    expect(response.res.statusCode).toBe(200);
+    const data = response.json();
+    expect(data.result).toMatchObject({ ok: false, error: "Trusted catalog artwork was not found. Review artwork manually." });
+    expect(data.job).toMatchObject({
+      metadataReviewStatus: "needs_review",
+      aiMetadataStatus: "failed",
+      lastError: "Trusted catalog artwork was not found. Review artwork manually.",
+    });
+    expect(organized).toBe(false);
   });
 
   it("rejects AI approval before a track has an output file", async () => {
@@ -636,6 +719,11 @@ describe("iPod sync endpoints", () => {
       confidence: 0.7,
       sources: ["ollama"],
       model: "llama3:latest",
+    });
+    state.fetchCatalogArtwork = async () => ({
+      ok: true,
+      path: join(project.artworkDir, `${job.id}-catalog.jpg`),
+      source: "itunes",
     });
     state.organizeExport = async ({ metadata }) => ({
       ok: false,
