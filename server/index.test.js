@@ -268,6 +268,22 @@ describe("helper asset endpoints", () => {
     expect(response.json()).toEqual({ error: "Not found" });
   });
 
+  it("accepts bare YouTube video IDs as canonical watch URLs", async () => {
+    const { state } = createState();
+
+    const response = await request(state, {
+      method: "POST",
+      url: "/jobs?token=test-token",
+      body: JSON.stringify({ text: "KvT4gs8wZxg", outputOption: "best-youtube" }),
+    });
+
+    expect(response.res.statusCode).toBe(200);
+    const data = response.json();
+    expect(data.created).toHaveLength(1);
+    expect(data.created[0].url).toBe("https://www.youtube.com/watch?v=KvT4gs8wZxg");
+    expect(data.rejected).toEqual([]);
+  });
+
   it("supports byte-range audio streaming for browser preview seeking", async () => {
     const { state, project } = createState();
     const created = createJobs(state.db, ["https://youtube.com/watch?v=asset-audio"]).created[0];

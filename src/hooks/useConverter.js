@@ -280,6 +280,12 @@ export function useConverter() {
     if (result.rejected?.length) {
       pushLog(`${result.rejected.length} non-YouTube link${result.rejected.length === 1 ? "" : "s"} rejected.`, "warn", "Queue:");
     }
+    if (result.skipped?.length) {
+      pushLog(`${result.skipped.length} YouTube link${result.skipped.length === 1 ? " is" : "s are"} already in your iListen library.`, "warn", "Queue:");
+    }
+    if (!result.created?.length && result.skipped?.length && !result.rejected?.length) {
+      throw new Error("That YouTube link is already in your iListen library.");
+    }
     return result.created?.length || 0;
   }, [pushLog, refreshFromResult]);
 
