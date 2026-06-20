@@ -824,9 +824,83 @@ npm run build -> passed (dist JS 260.96 kB / gzip 75.93 kB)
 No live library, Apple Music, or iPod state was changed during this fix.
 ```
 
+Later on 2026-06-19, the AI metadata artwork path was hardened and the affected live rows were repaired:
+
+```text
+Root cause: Apple Music imports the local file tags/artwork that iListen embeds; it does not auto-match converted audio to official Apple catalog artwork. The AI/evidence approval path had started fixing text metadata from iTunes evidence while still reusing the downloaded YouTube thumbnail as cover art.
+Implemented strict catalog-art approval:
+- `server/lib/catalogArtwork.js` selects trusted art from structured evidence, preferring iTunes artwork URLs upgraded to 1000x1000 and falling back to Cover Art Archive when a MusicBrainz release id exists. Non-image, too-small, too-large, and non-square images are rejected.
+- `POST /jobs/:id/ai-approve` now fetches trusted catalog art before organize/retag. If art is unavailable, the row stays `needs_review`; if art is found, it is stored in `customCoverPath` so retag embeds it instead of the YouTube thumbnail.
+- `/jobs/:id/cover` and frontend mapping now prefer `customCoverPath || coverPath`, matching retag precedence.
+- Added `npm run repair:ai-artwork` dry run plus `--apply` and `--ids` for AI-approved rows missing trusted art.
+Live repair run:
+- Dry run found 6 affected AI-approved rows.
+- `npm run repair:ai-artwork -- --apply` saved 1000x1000 iTunes catalog JPEGs and retagged: Ik Kudi, Aasa Kooda, Labon Ko, Pal Behta Jaaye 2.0, Iraaday, Say Yes To Heaven.
+- Normal Apple Music handoff was run for those 6 repaired files; all 6 are now `imported`/`added`/ready for Finder sync in the DB.
+- `iPod Sync` duplicate cleanup removed stale/extra playlist entries for those repaired titles only; the six repaired titles now appear once each in `iPod Sync`, each with artwork attached.
+Verification:
+- `npm test` -> 22 files / 134 tests passed
+- `npm run lint` -> passed
+- `npm run build` -> passed (dist JS 261.21 kB / gzip 76.12 kB)
+- Stored catalog art and embedded `.m4a` artwork for all 6 repaired rows verified as 1000x1000 JPEG.
+- `npm run repair:ai-artwork` after repair -> 0 candidates.
+- SQLite check after handoff -> 0 approved tracks pending Apple Music handoff, 144 approved tracks ready for Finder sync.
+```
+
+Later on 2026-06-19, the Convert link parser was fixed after the user pasted only a YouTube video id:
+
+```text
+Observed UI issue: the paste chip displayed `KvT4gs8wZxg`, then Add to queue showed "No new YouTube links to add." That id already existed in the live DB as `https://www.youtube.com/watch?v=KvT4gs8wZxg` for The Feeling (feat. Halsey), but the UI did not explain the duplicate and bare-id normalization could create a youtu.be variant.
+Fix:
+- Frontend `src/utils/links.js` now accepts bare 11-character YouTube ids and canonicalizes YouTube links/shorts/youtu.be forms to `https://www.youtube.com/watch?v=...`.
+- Backend `server/lib/youtube.js` mirrors that canonicalization, splits pasted text on whitespace/commas/newlines, strips trailing punctuation, and de-dupes canonical URLs before `createJobs`.
+- `src/hooks/useConverter.js` now logs duplicate skipped links and throws a clear "already in your iListen library" message when every submitted link was a duplicate.
+- Added parser and endpoint tests for bare ids and canonical URLs.
+Live state:
+- A temporary duplicate `https://youtu.be/KvT4gs8wZxg` row created during verification was removed before conversion.
+- Live DB now has exactly one row for `KvT4gs8wZxg`, the original canonical completed row.
+- Helper was restarted in a foreground Codex session on `127.0.0.1:4317` and the project `/Users/veerr_89/Music/iListen Project` was opened.
+Verification:
+- `npm test` -> 22 files / 137 tests passed
+- `npm run lint` -> passed
+- `npm run build` -> passed (dist JS 262.15 kB / gzip 76.40 kB)
+```
+
+Later on 2026-06-19, the corrected AI-artwork rows were refreshed directly inside Apple Music `iPod Sync` after the user noticed Apple Music still showed stale playlist rows:
+
+```text
+Observed state: iListen DB had the repaired rows marked imported/added, but Apple Music `iPod Sync` had Music-library copied rows whose persistent IDs did not all match the DB anymore. The Sync tab correctly showed "Nothing new to add", so the normal handoff button would not refresh those stale Apple Music rows.
+Action taken:
+- Used AppleScript to update the actual `iPod Sync` playlist rows for Ik Kudi, Aasa Kooda, Labon Ko, Pal Behta Jaaye 2.0, Iraaday, and Say Yes To Heaven from iListen's corrected metadata and `customCoverPath` artwork.
+- Updated the DB `musicPersistentId` values to match the current Apple Music playlist rows.
+Verification:
+- Each of the six rows appears in `iPod Sync` with corrected artist/album metadata and 1 artwork attached.
+- DB now matches those Apple Music persistent IDs and still shows imported/added/ready-for-Finder-sync for all six.
+- 0 approved tracks pending Apple Music handoff.
+- 1 complete track still needs review (unrelated to the artwork refresh).
+```
+
+Later on 2026-06-19, Apple Music `iPod Sync` was fully rebuilt after the playlist still showed stale/wrong rows:
+
+```text
+Observed problem: Apple Music `iPod Sync` had 346 rows while iListen had 146 approved rows. The screenshot showed a bad `The Feeling ft. Halsey | Justin Bieber | 2018 - Singles` row with YouTube-style artwork. iListen also had a bad duplicate DB row for that URL (`8---eJa5G48`) and a wrong `Boyfriend | Justin Bieber | Pop Party 10` row.
+Action taken:
+- Backed up DB to `/Users/veerr_89/Music/iListen Project/backups/ilisten-before-ipod-sync-rebuild-20260619-163250.sqlite`.
+- Dumped the old Apple Music playlist rows to `/Users/veerr_89/Music/iListen Project/backups/ipod-sync-before-rebuild-20260619-163250.tsv`.
+- Corrected `Boyfriend` to `Justin Bieber | Believe (Deluxe Edition) | 2012 | track 2`, fetched 1000x1000 Apple/iTunes catalog art, moved/retagged it, and reset handoff status.
+- Removed the duplicate bad `The Feeling ft. Halsey | 2018 - Singles` DB row plus its local export/art files.
+- Deleted/recreated only the Apple Music user playlist `iPod Sync`, then rebuilt it from iListen's 145 clean approved exports. Existing Music library tracks were reused by persistent ID where possible; file fallback imported 28 rows.
+- Added back `Say Yes To Heaven` after a post-rebuild PID comparison found it missing.
+Verification:
+- Apple Music `iPod Sync` count is now 145.
+- SQLite approved-ready count is 145, with 0 pending Apple Music handoff.
+- Full PID comparison: 145 playlist PIDs / 145 approved jobs / 0 missing.
+- Apple Music now shows `The Feeling (feat. Halsey) | Justin Bieber | Purpose` and `Boyfriend | Justin Bieber | Believe (Deluxe Edition)`, each with artwork attached.
+```
+
 ## Current User-Facing Next Step
 
-There are now 14 newly approved tracks ready for Apple Music. Use the Sync tab button `Add 14 new/changed to Apple Music`, then sync `iPod Sync` in Finder to apply the expanded playlist to the physical iPod. Do not just unplug the iPod from the Apple Music playlist view. After Finder finishes syncing, eject the iPod.
+There are currently 0 approved tracks pending Apple Music handoff. Apple Music `iPod Sync` has been rebuilt to match iListen's 145 clean approved tracks; the next user-facing step is to sync `iPod Sync` in Finder to apply the current playlist to the physical iPod. Do not just unplug the iPod from the Apple Music playlist view. After Finder finishes syncing, eject the iPod.
 
 To hear songs on the iPod, the user should:
 
