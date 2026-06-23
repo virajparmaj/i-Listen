@@ -117,8 +117,6 @@ desktop.ini
 .codex/
 .claude/
 .cursor/
-.impeccable/
-.impeccable.md
 
 ## Optional local model / cache drops
 models/
