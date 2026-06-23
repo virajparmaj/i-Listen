@@ -10,6 +10,7 @@ const baseTrack = {
 describe("output metadata", () => {
   it("maps required presets to compatible outputs", () => {
     expect(outputFor(presetFor("best").outputOption).encoder).toContain("Copy AAC");
+    expect(outputFor(presetFor("ipodSafe").outputOption).encoder).toContain("headroom");
     expect(outputFor(presetFor("mp3").outputOption).encoder).toBe("libmp3lame -q:a 0");
     expect(outputFor(presetFor("apple").outputOption).ext).toBe("m4a");
     expect(outputFor(presetFor("alac").outputOption).format).toBe("alac");

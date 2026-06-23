@@ -48,6 +48,11 @@ const JOB_FIELDS = {
   aiMetadataSources: "ai_metadata_sources",
   aiMetadataError: "ai_metadata_error",
   aiMetadataUpdatedAt: "ai_metadata_updated_at",
+  audioIssueTags: "audio_issue_tags",
+  audioRepairPreset: "audio_repair_preset",
+  audioRepairStatus: "audio_repair_status",
+  audioRepairNotes: "audio_repair_notes",
+  audioAnalysis: "audio_analysis",
 };
 
 function now() {
@@ -59,6 +64,24 @@ function parsePlaylists(value) {
     return normalizePlaylists(JSON.parse(value || "[]"));
   } catch {
     return normalizePlaylists(value);
+  }
+}
+
+function parseJsonArray(value) {
+  try {
+    const parsed = JSON.parse(value || "[]");
+    return Array.isArray(parsed) ? parsed.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseJsonObject(value) {
+  try {
+    const parsed = JSON.parse(value || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
   }
 }
 
@@ -93,6 +116,11 @@ function migrateSchema(db) {
   addColumnIfMissing(db, "jobs", "ai_metadata_sources", "TEXT NOT NULL DEFAULT '[]'");
   addColumnIfMissing(db, "jobs", "ai_metadata_error", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(db, "jobs", "ai_metadata_updated_at", "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, "jobs", "audio_issue_tags", "TEXT NOT NULL DEFAULT '[]'");
+  addColumnIfMissing(db, "jobs", "audio_repair_preset", "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, "jobs", "audio_repair_status", "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, "jobs", "audio_repair_notes", "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, "jobs", "audio_analysis", "TEXT NOT NULL DEFAULT '{}'");
   addColumnIfMissing(db, "logs", "category", "TEXT NOT NULL DEFAULT 'general'");
 }
 
@@ -251,6 +279,11 @@ export function jobFromRow(row) {
     aiMetadataSources: parsePlaylists(row.ai_metadata_sources || "[]"),
     aiMetadataError: row.ai_metadata_error || "",
     aiMetadataUpdatedAt: row.ai_metadata_updated_at || "",
+    audioIssueTags: parseJsonArray(row.audio_issue_tags || "[]"),
+    audioRepairPreset: row.audio_repair_preset || "",
+    audioRepairStatus: row.audio_repair_status || "",
+    audioRepairNotes: row.audio_repair_notes || "",
+    audioAnalysis: parseJsonObject(row.audio_analysis || "{}"),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -353,6 +386,8 @@ export function updateJob(db, id, patch) {
     if (key === "playlists") return JSON.stringify(customPlaylists(value));
     if (key === "aiMetadataSources") return JSON.stringify(normalizePlaylists(value));
     if (key === "aiMetadataConfidence") return value == null || value === "" ? null : Number(value);
+    if (key === "audioIssueTags") return JSON.stringify(parseJsonArray(JSON.stringify(value || [])));
+    if (key === "audioAnalysis") return JSON.stringify(value && typeof value === "object" && !Array.isArray(value) ? value : {});
     return value ?? "";
   });
   assignments.push("updated_at = ?");

@@ -15,7 +15,7 @@ export function IpodExplainer() {
         <Card variant="recessed" style={{ padding: 12, display: "flex", alignItems: "center", gap: 8 }}>
           <Icon name="done" size={14} color="var(--status-success)" />
           <span style={body}>
-            <strong style={{ color: "var(--text-primary)" }}>“Viraj Parmar’s iPod”</strong> — the real sync device.
+            <strong style={{ color: "var(--text-primary)" }}>“Viraj's iPod”</strong> — the real sync device.
           </span>
         </Card>
 

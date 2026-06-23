@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough, Readable } from "node:stream";
 import { afterEach, describe, expect, it } from "vitest";
-import { createJobs, listMetadataExamples, openDatabase, updateJob } from "./lib/db.js";
+import { createJobs, getJob, listMetadataExamples, openDatabase, updateJob } from "./lib/db.js";
 import { createAppState, helperReuseMessage, helperStartupMessage, probeRunningHelper, route, selectAppleMusicHandoffJobs } from "./index.js";
 
 let tempDir = null;
@@ -83,6 +83,10 @@ async function request(state, options) {
   await route(req, wrapped.res, state, new Set());
   await wrapped.done();
   return wrapped;
+}
+
+function nextTick() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 function makeProbeRequest({ statusCode = 200, body = "", error = null, assertOptions = null } = {}) {
@@ -353,6 +357,461 @@ describe("helper asset endpoints", () => {
     expect(existsSync(coverPath)).toBe(false);
     expect(existsSync(customCoverPath)).toBe(false);
     expect(existsSync(outputPath)).toBe(false);
+  });
+});
+
+describe("reconvert endpoints", () => {
+  it("reconverts a completed job with saved source/link data and preserves approved metadata", async () => {
+    const { state, project } = createState();
+    state.tools = readyTools();
+    const created = createJobs(state.db, ["https://www.youtube.com/watch?v=reconvert-one"]).created[0];
+    const sourcePath = join(project.stagingDir, `${created.id}.m4a`);
+    const customCoverPath = join(project.artworkDir, `${created.id}-custom.jpg`);
+    const outputPath = join(project.exportsDir, "Music Library", "Clean Artist", "Clean Album", "04 - Clean Song.m4a");
+    mkdirSync(join(outputPath, ".."), { recursive: true });
+    writeFileSync(sourcePath, Buffer.from("source"));
+    writeFileSync(customCoverPath, Buffer.from("cover"));
+    writeFileSync(outputPath, Buffer.from("audio"));
+    updateJob(state.db, created.id, {
+      status: "complete",
+      title: "Clean Song",
+      artist: "Clean Artist",
+      album: "Clean Album",
+      albumArtist: "Clean Artist",
+      year: "2020",
+      track: "4",
+      disc: "1",
+      genre: "Pop",
+      playlists: ["Road Trip"],
+      sourcePath,
+      customCoverPath,
+      outputPath,
+      exportStatus: "validated",
+      metadataStatus: "complete",
+      artworkStatus: "embedded",
+      metadataReviewStatus: "approved",
+      appleMusicImportStatus: "imported",
+      appleMusicPlaylistStatus: "added",
+      readyForFinderSync: 1,
+      syncState: "needs_manual",
+      musicPersistentId: "ABC123",
+    });
+    let received = null;
+    state.reconvertExistingJob = async (input) => {
+      received = input;
+      return {
+        sourcePath,
+        usedSavedSource: true,
+        outputPath,
+        sourceCodec: "aac",
+        sourceContainer: "mov,mp4,m4a,3gp,3g2,mj2",
+        selectedOutput: "Bass-safe AAC for iPod",
+        durationSec: 180,
+        sizeBytes: 1234,
+        metadataStatus: "complete",
+        artworkStatus: "embedded",
+        warning: "Bass-safe export leaves headroom.",
+      };
+    };
+
+    const response = await request(state, {
+      method: "POST",
+      url: `/jobs/${created.id}/reconvert?token=test-token`,
+      body: JSON.stringify({ outputOption: "ipod-safe-aac", replaceExisting: true }),
+    });
+
+    expect(response.res.statusCode).toBe(202);
+    expect(response.json().result).toMatchObject({ id: created.id, accepted: true });
+    await nextTick();
+    expect(received.job).toMatchObject({
+      id: created.id,
+      url: "https://www.youtube.com/watch?v=reconvert-one",
+      sourcePath,
+      title: "Clean Song",
+      artist: "Clean Artist",
+      album: "Clean Album",
+      customCoverPath,
+      playlists: ["Road Trip"],
+    });
+    expect(received.outputOption).toBe("ipod-safe-aac");
+    expect(getJob(state.db, created.id)).toMatchObject({
+      outputOption: "ipod-safe-aac",
+      selectedOutput: "Bass-safe AAC for iPod",
+      title: "Clean Song",
+      artist: "Clean Artist",
+      album: "Clean Album",
+      playlists: ["Road Trip"],
+      metadataReviewStatus: "approved",
+      appleMusicImportStatus: "pending",
+      appleMusicPlaylistStatus: "pending",
+      readyForFinderSync: 0,
+      syncState: "",
+      musicPersistentId: "",
+      exportStatus: "validated",
+    });
+  });
+
+  it("processes a reconvert batch sequentially", async () => {
+    const { state, project } = createState();
+    state.tools = readyTools();
+    const first = createJobs(state.db, ["https://www.youtube.com/watch?v=reconvert-a"]).created[0];
+    const second = createJobs(state.db, ["https://www.youtube.com/watch?v=reconvert-b"]).created[0];
+    for (const [index, job] of [first, second].entries()) {
+      const sourcePath = join(project.stagingDir, `${job.id}.m4a`);
+      const outputPath = join(project.exportsDir, "Music Library", "Artist", "Album", `0${index + 1} - Song.m4a`);
+      mkdirSync(join(outputPath, ".."), { recursive: true });
+      writeFileSync(sourcePath, Buffer.from("source"));
+      writeFileSync(outputPath, Buffer.from("audio"));
+      updateJob(state.db, job.id, {
+        status: "complete",
+        sourcePath,
+        outputPath,
+        exportStatus: "validated",
+        metadataReviewStatus: "approved",
+        appleMusicPlaylistStatus: "added",
+        readyForFinderSync: 1,
+      });
+    }
+    const order = [];
+    state.reconvertExistingJob = async ({ job, outputOption }) => {
+      order.push(job.id);
+      return {
+        sourcePath: job.sourcePath,
+        usedSavedSource: true,
+        outputPath: job.outputPath,
+        sourceCodec: "aac",
+        sourceContainer: "mp4",
+        selectedOutput: outputOption,
+        durationSec: 100,
+        sizeBytes: 1000,
+        metadataStatus: "complete",
+        artworkStatus: "embedded",
+        warning: "",
+      };
+    };
+
+    const response = await request(state, {
+      method: "POST",
+      url: "/jobs/reconvert?token=test-token",
+      body: JSON.stringify({ ids: [second.id, first.id], outputOption: "ipod-safe-aac" }),
+    });
+
+    expect(response.res.statusCode).toBe(202);
+    const data = response.json();
+    expect(data.results).toEqual([
+      expect.objectContaining({ id: second.id, accepted: true }),
+      expect.objectContaining({ id: first.id, accepted: true }),
+    ]);
+    await nextTick();
+    expect(order).toEqual([second.id, first.id]);
+    expect(getJob(state.db, first.id)).toMatchObject({
+      outputOption: "ipod-safe-aac",
+      appleMusicPlaylistStatus: "pending",
+      readyForFinderSync: 0,
+    });
+  });
+
+  it("rejects reconvert when neither a source file nor saved URL is available", async () => {
+    const { state, project } = createState();
+    state.tools = readyTools();
+    const created = createJobs(state.db, ["https://www.youtube.com/watch?v=reconvert-nosource"]).created[0];
+    const outputPath = join(project.exportsDir, "Music Library", "Artist", "Album", "01 - Song.m4a");
+    mkdirSync(join(outputPath, ".."), { recursive: true });
+    writeFileSync(outputPath, Buffer.from("audio"));
+    updateJob(state.db, created.id, {
+      url: "",
+      status: "complete",
+      outputPath,
+      sourcePath: "",
+      exportStatus: "validated",
+      metadataReviewStatus: "approved",
+    });
+
+    const response = await request(state, {
+      method: "POST",
+      url: `/jobs/${created.id}/reconvert?token=test-token`,
+      body: JSON.stringify({ outputOption: "ipod-safe-aac" }),
+    });
+
+    expect(response.res.statusCode).toBe(400);
+    expect(response.json().error).toMatch(/saved YouTube URL/);
+  });
+});
+
+describe("audio repair endpoints", () => {
+  it("flags, dedupes, and clears per-track audio issues", async () => {
+    const { state } = createState();
+    const job = createJobs(state.db, ["https://youtube.com/watch?v=audio-flags"]).created[0];
+
+    const flagged = await request(state, {
+      method: "PATCH",
+      url: `/jobs/${job.id}/audio-issues?token=test-token`,
+      body: JSON.stringify({
+        audioIssueTags: ["bass_crackle", "bass_crackle", "left_channel_disturbance"],
+        audioRepairNotes: "Crackles on old iPod.",
+      }),
+    });
+
+    expect(flagged.res.statusCode).toBe(200);
+    expect(flagged.json().job).toMatchObject({
+      audioIssueTags: ["bass_crackle", "left_channel_disturbance"],
+      audioRepairStatus: "needs_repair",
+      audioRepairNotes: "Crackles on old iPod.",
+    });
+
+    const cleared = await request(state, {
+      method: "PATCH",
+      url: `/jobs/${job.id}/audio-issues?token=test-token`,
+      body: JSON.stringify({ cleared: true }),
+    });
+
+    expect(cleared.res.statusCode).toBe(200);
+    expect(cleared.json().job).toMatchObject({
+      audioIssueTags: [],
+      audioRepairStatus: "cleared",
+      audioRepairNotes: "Crackles on old iPod.",
+    });
+  });
+
+  it("stores analyze-only astats results without rewriting the export", async () => {
+    const { state, project } = createState();
+    state.tools = readyTools();
+    const job = createJobs(state.db, ["https://youtube.com/watch?v=audio-analyze"]).created[0];
+    const outputPath = join(project.exportsDir, "Music Library", "Artist", "Album", "01 - Song.m4a");
+    mkdirSync(join(outputPath, ".."), { recursive: true });
+    writeFileSync(outputPath, Buffer.from("audio"));
+    updateJob(state.db, job.id, {
+      status: "complete",
+      outputPath,
+      audioIssueTags: ["left_channel_disturbance"],
+      audioRepairStatus: "needs_repair",
+    });
+    state.analyzeAudio = async ({ inputPath }) => ({
+      analyzedAt: "2026-06-21T12:00:00.000Z",
+      inputPath,
+      summary: ["left channel hotter/noisier"],
+      flags: { leftHotterOrNoisier: true },
+      channels: [],
+      comparisons: { rmsLevelDeltaDb: 2.5 },
+    });
+
+    const response = await request(state, {
+      method: "POST",
+      url: `/jobs/${job.id}/audio-repair?token=test-token`,
+      body: JSON.stringify({ analyzeOnly: true }),
+    });
+
+    expect(response.res.statusCode).toBe(200);
+    expect(response.json().result).toMatchObject({ id: job.id, ok: true, summary: ["left channel hotter/noisier"] });
+    expect(getJob(state.db, job.id)).toMatchObject({
+      outputPath,
+      audioRepairStatus: "needs_repair",
+      audioAnalysis: {
+        summary: ["left channel hotter/noisier"],
+        flags: { leftHotterOrNoisier: true },
+      },
+    });
+  });
+
+  it("repairs a flagged track while preserving metadata, artwork, playlists, and resetting Apple Music handoff", async () => {
+    const { state, project } = createState();
+    state.tools = readyTools();
+    const created = createJobs(state.db, ["https://www.youtube.com/watch?v=audio-repair-one"]).created[0];
+    const sourcePath = join(project.stagingDir, `${created.id}.m4a`);
+    const customCoverPath = join(project.artworkDir, `${created.id}-custom.jpg`);
+    const outputPath = join(project.exportsDir, "Music Library", "Clean Artist", "Clean Album", "04 - Clean Song.m4a");
+    mkdirSync(join(outputPath, ".."), { recursive: true });
+    writeFileSync(sourcePath, Buffer.from("source"));
+    writeFileSync(customCoverPath, Buffer.from("cover"));
+    writeFileSync(outputPath, Buffer.from("audio"));
+    updateJob(state.db, created.id, {
+      status: "complete",
+      title: "Clean Song",
+      artist: "Clean Artist",
+      album: "Clean Album",
+      albumArtist: "Clean Artist",
+      year: "2020",
+      track: "4",
+      genre: "Pop",
+      playlists: ["Road Trip"],
+      sourcePath,
+      customCoverPath,
+      outputPath,
+      exportStatus: "validated",
+      metadataStatus: "complete",
+      artworkStatus: "embedded",
+      metadataReviewStatus: "approved",
+      appleMusicImportStatus: "imported",
+      appleMusicPlaylistStatus: "added",
+      readyForFinderSync: 1,
+      syncState: "needs_manual",
+      musicPersistentId: "ABC123",
+      audioIssueTags: ["left_channel_disturbance"],
+      audioRepairStatus: "needs_repair",
+    });
+    state.analyzeAudio = async ({ kind }) => ({
+      analyzedAt: `2026-06-21T12:00:0${kind === "after" ? "2" : "1"}.000Z`,
+      summary: kind === "after" ? [] : ["left channel hotter/noisier"],
+      flags: kind === "after" ? {} : { leftHotterOrNoisier: true },
+    });
+    let received = null;
+    state.reconvertExistingJob = async (input) => {
+      received = input;
+      return {
+        sourcePath,
+        usedSavedSource: true,
+        outputPath,
+        sourceCodec: "aac",
+        sourceContainer: "mp4",
+        selectedOutput: "Stereo Blend Safe AAC",
+        durationSec: 180,
+        sizeBytes: 1234,
+        metadataStatus: "complete",
+        artworkStatus: "embedded",
+        warning: "Stereo Blend reduces left-only artifacts.",
+      };
+    };
+
+    const response = await request(state, {
+      method: "POST",
+      url: `/jobs/${created.id}/audio-repair?token=test-token`,
+      body: JSON.stringify({ preset: "stereo-blend-safe", replaceExisting: true }),
+    });
+
+    expect(response.res.statusCode).toBe(202);
+    await nextTick();
+    expect(received.outputOption).toBe("stereo-blend-safe");
+    expect(received.job).toMatchObject({
+      title: "Clean Song",
+      artist: "Clean Artist",
+      album: "Clean Album",
+      customCoverPath,
+      playlists: ["Road Trip"],
+    });
+    expect(getJob(state.db, created.id)).toMatchObject({
+      title: "Clean Song",
+      artist: "Clean Artist",
+      album: "Clean Album",
+      playlists: ["Road Trip"],
+      outputPath,
+      outputOption: "stereo-blend-safe",
+      selectedOutput: "Stereo Blend Safe AAC",
+      audioIssueTags: [],
+      audioRepairPreset: "stereo-blend-safe",
+      audioRepairStatus: "repaired",
+      metadataReviewStatus: "approved",
+      appleMusicImportStatus: "pending",
+      appleMusicPlaylistStatus: "pending",
+      readyForFinderSync: 0,
+      syncState: "",
+      musicPersistentId: "",
+    });
+  });
+
+  it("processes audio repair batches sequentially", async () => {
+    const { state, project } = createState();
+    state.tools = readyTools();
+    const first = createJobs(state.db, ["https://www.youtube.com/watch?v=audio-batch-a"]).created[0];
+    const second = createJobs(state.db, ["https://www.youtube.com/watch?v=audio-batch-b"]).created[0];
+    for (const [index, job] of [first, second].entries()) {
+      const sourcePath = join(project.stagingDir, `${job.id}.m4a`);
+      const outputPath = join(project.exportsDir, "Music Library", "Artist", "Album", `0${index + 1} - Song.m4a`);
+      mkdirSync(join(outputPath, ".."), { recursive: true });
+      writeFileSync(sourcePath, Buffer.from("source"));
+      writeFileSync(outputPath, Buffer.from("audio"));
+      updateJob(state.db, job.id, {
+        status: "complete",
+        sourcePath,
+        outputPath,
+        exportStatus: "validated",
+        metadataReviewStatus: "approved",
+        audioIssueTags: ["bass_crackle"],
+        audioRepairStatus: "needs_repair",
+      });
+    }
+    state.analyzeAudio = async () => ({ analyzedAt: "2026-06-21T12:00:00.000Z", summary: [], flags: {} });
+    const order = [];
+    state.reconvertExistingJob = async ({ job, outputOption }) => {
+      order.push(job.id);
+      return {
+        sourcePath: job.sourcePath,
+        usedSavedSource: true,
+        outputPath: job.outputPath,
+        sourceCodec: "aac",
+        sourceContainer: "mp4",
+        selectedOutput: outputOption,
+        durationSec: 100,
+        sizeBytes: 1000,
+        metadataStatus: "complete",
+        artworkStatus: "embedded",
+        warning: "",
+      };
+    };
+
+    const response = await request(state, {
+      method: "POST",
+      url: "/jobs/audio-repair?token=test-token",
+      body: JSON.stringify({ ids: [second.id, first.id], preset: "bass-safe-plus" }),
+    });
+
+    expect(response.res.statusCode).toBe(202);
+    await nextTick();
+    expect(order).toEqual([second.id, first.id]);
+    expect(getJob(state.db, first.id)).toMatchObject({
+      audioIssueTags: [],
+      audioRepairPreset: "bass-safe-plus",
+      audioRepairStatus: "repaired",
+    });
+  });
+
+  it("keeps the old outputPath and handoff state when audio repair fails", async () => {
+    const { state, project } = createState();
+    state.tools = readyTools();
+    const job = createJobs(state.db, ["https://www.youtube.com/watch?v=audio-fail"]).created[0];
+    const sourcePath = join(project.stagingDir, `${job.id}.m4a`);
+    const outputPath = join(project.exportsDir, "Music Library", "Artist", "Album", "01 - Song.m4a");
+    mkdirSync(join(outputPath, ".."), { recursive: true });
+    writeFileSync(sourcePath, Buffer.from("source"));
+    writeFileSync(outputPath, Buffer.from("audio"));
+    updateJob(state.db, job.id, {
+      status: "complete",
+      sourcePath,
+      outputPath,
+      exportStatus: "validated",
+      metadataReviewStatus: "approved",
+      appleMusicImportStatus: "imported",
+      appleMusicPlaylistStatus: "added",
+      readyForFinderSync: 1,
+      syncState: "needs_manual",
+      musicPersistentId: "KEEP",
+      audioIssueTags: ["bass_crackle"],
+      audioRepairStatus: "needs_repair",
+    });
+    state.analyzeAudio = async () => ({ analyzedAt: "2026-06-21T12:00:00.000Z", summary: ["peaks too hot"], flags: { clipping: true } });
+    state.reconvertExistingJob = async () => {
+      throw new Error("ffmpeg repair failed");
+    };
+
+    const response = await request(state, {
+      method: "POST",
+      url: `/jobs/${job.id}/audio-repair?token=test-token`,
+      body: JSON.stringify({ preset: "bass-safe-plus" }),
+    });
+
+    expect(response.res.statusCode).toBe(202);
+    await nextTick();
+    expect(getJob(state.db, job.id)).toMatchObject({
+      outputPath,
+      audioIssueTags: ["bass_crackle"],
+      audioRepairPreset: "bass-safe-plus",
+      audioRepairStatus: "failed",
+      appleMusicImportStatus: "imported",
+      appleMusicPlaylistStatus: "added",
+      readyForFinderSync: 1,
+      syncState: "needs_manual",
+      musicPersistentId: "KEEP",
+      lastError: "ffmpeg repair failed",
+    });
   });
 });
 

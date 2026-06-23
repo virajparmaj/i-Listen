@@ -540,14 +540,14 @@ a:hover { text-decoration: underline; }
 }
 
 .il-output-controls-compact .il-preset-card {
-  height: 76px;
-  min-height: 76px;
-  padding: 9px 10px;
+  height: 78px;
+  min-height: 78px;
+  padding: 9px 9px;
 }
 
 .il-output-controls-compact .il-preset-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(3, minmax(84px, 1fr));
+  gap: 8px;
 }
 
 .il-output-controls-compact .il-preset-copy-technical {
@@ -756,7 +756,8 @@ a:hover { text-decoration: underline; }
 }
 
 @media (max-width: 430px) {
-  .il-preset-grid {
+  .il-preset-grid,
+  .il-output-controls-compact .il-preset-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 

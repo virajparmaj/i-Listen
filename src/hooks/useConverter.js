@@ -24,11 +24,16 @@ import {
   openProject,
   organizeJobs,
   pairHelper,
+  repairAudioJob,
+  repairAudioJobs,
+  reconvertJob,
+  reconvertJobs,
   removeJob,
   retagTrack,
   retryJob,
   selectIpodVolume,
   startJob,
+  updateAudioIssues,
   updateJob,
   uploadArtwork,
 } from "../utils/localHelper.js";
@@ -82,7 +87,7 @@ export function mapJob(job, index = 0) {
     versionLabel: "",
     durationSec: job.durationSec,
     duration: fmtDuration(job.durationSec),
-    preset: output.value === "best-youtube" ? "best" : output.value === "alac" ? "alac" : output.value === "mp3-v0" ? "mp3" : "apple",
+    preset: output.value === "best-youtube" ? "best" : output.value === "ipod-safe-aac" ? "ipodSafe" : output.value === "alac" ? "alac" : output.value === "mp3-v0" ? "mp3" : "apple",
     outputOption: output.value,
     format: output.format,
     ext: output.ext,
@@ -116,6 +121,11 @@ export function mapJob(job, index = 0) {
     aiMetadataSources: job.aiMetadataSources || [],
     aiMetadataError: job.aiMetadataError || "",
     aiMetadataUpdatedAt: job.aiMetadataUpdatedAt || "",
+    audioIssueTags: job.audioIssueTags || [],
+    audioRepairPreset: job.audioRepairPreset || "",
+    audioRepairStatus: job.audioRepairStatus || "",
+    audioRepairNotes: job.audioRepairNotes || "",
+    audioAnalysis: job.audioAnalysis || {},
     lastError: job.lastError || null,
     warning: job.warning || null,
     error: job.error || null,
@@ -421,6 +431,44 @@ export function useConverter() {
     return result;
   }, [refreshFromResult]);
 
+  const updateTrackAudioIssues = useCallback(async (track, patch = {}) => {
+    if (!helperRef.current.connected) throw new Error("Local helper is not connected.");
+    const id = typeof track === "string" ? track : track.id;
+    const result = await updateAudioIssues(id, patch);
+    refreshFromResult(result);
+    return result;
+  }, [refreshFromResult]);
+
+  const repairAudioTrack = useCallback(async (track, options = {}) => {
+    if (!helperRef.current.connected) throw new Error("Local helper is not connected.");
+    const id = typeof track === "string" ? track : track.id;
+    const result = await repairAudioJob(id, options);
+    refreshFromResult(result);
+    return result;
+  }, [refreshFromResult]);
+
+  const repairAudioTracks = useCallback(async (ids, options = {}) => {
+    if (!helperRef.current.connected) throw new Error("Local helper is not connected.");
+    const result = await repairAudioJobs(ids, options);
+    refreshFromResult(result);
+    return result;
+  }, [refreshFromResult]);
+
+  const reconvertTrack = useCallback(async (track, options = {}) => {
+    if (!helperRef.current.connected) throw new Error("Local helper is not connected.");
+    const id = typeof track === "string" ? track : track.id;
+    const result = await reconvertJob(id, options);
+    refreshFromResult(result);
+    return result;
+  }, [refreshFromResult]);
+
+  const reconvertTracks = useCallback(async (ids, options = {}) => {
+    if (!helperRef.current.connected) throw new Error("Local helper is not connected.");
+    const result = await reconvertJobs(ids, options);
+    refreshFromResult(result);
+    return result;
+  }, [refreshFromResult]);
+
   const handoffToAppleMusic = useCallback(async (ids = null) => {
     if (!helperRef.current.connected) throw new Error("Local helper is not connected.");
     const result = await handoffToIpod(ids);
@@ -474,7 +522,8 @@ export function useConverter() {
       start, pause, addFromLinks, updateTrack, applyToAll, removeTrack,
       retry, clearCompleted, resetAll, applyGlobalCover, updateSettings,
       setGlobalCover, pushLog, exportPlaylist,
-      approveTrack, approveTracks, aiApproveTrack, handoffToAppleMusic, cleanupMusicPlaylists, refreshIpod, selectIpod,
+      approveTrack, approveTracks, aiApproveTrack, updateTrackAudioIssues, repairAudioTrack, repairAudioTracks, reconvertTrack, reconvertTracks,
+      handoffToAppleMusic, cleanupMusicPlaylists, refreshIpod, selectIpod,
     },
   };
 }

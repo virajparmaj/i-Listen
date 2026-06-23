@@ -6,8 +6,9 @@ import { Icon } from "./ui/Icon.jsx";
 import { IpodDevicePanel } from "./IpodDevicePanel.jsx";
 import { PlaylistStructurePanel } from "./PlaylistStructurePanel.jsx";
 import { ManualFallback } from "./ManualFallback.jsx";
-import { SyncStatusBadge } from "./SyncStatusBadge.jsx";
+import { AudioIssueFilters } from "./AudioIssueFilters.jsx";
 import { sortForSyncTracks } from "../utils/trackOrdering.js";
+import { audioIssueLabels, filterByAudioIssues, hasAudioIssue, needsAudioRepair } from "../utils/audioRepair.js";
 
 const STEP_LABELS = [
   "Convert video to audio",
@@ -35,7 +36,7 @@ function Step({ index, label, tone, detail }) {
 }
 
 const finderSteps = [
-  "Select “Viraj Parmar’s iPod” in Finder → Music tab.",
+  "Select “Viraj's iPod” in Finder → Music tab.",
   "Choose selected playlists → tick “iPod Sync”.",
   "Apply/Sync, then eject before unplugging.",
 ];
@@ -67,11 +68,11 @@ function FinderSyncChecklist({ count }) {
   );
 }
 
-function TrackRow({ track, onEdit, onApprove, onRemove, approving, aiApproving, deleting }) {
-  const metaTone = track.metadataStatus === "complete" ? "success" : "warning";
-  const artTone = track.artworkStatus === "embedded" ? "success" : track.artworkStatus === "external" ? "info" : "warning";
+function TrackRow({ track, onEdit, onApprove, onRemove, onReconvert, onAudioIssues, onAudioRepair, selected, onToggleSelect, approving, aiApproving, deleting }) {
   const approved = track.metadataReviewStatus === "approved";
   const aiConfidence = Number.isFinite(track.aiMetadataConfidence) ? Math.round(track.aiMetadataConfidence * 100) : null;
+  const issueLabels = audioIssueLabels(track);
+  const repairNeeded = needsAudioRepair(track);
   return (
     <div className={[
       "il-sync-track-row",
@@ -86,20 +87,35 @@ function TrackRow({ track, onEdit, onApprove, onRemove, approving, aiApproving, 
         background: track.coverArt ? `center/cover no-repeat url(${track.coverArt})` : "var(--surface-recessed)",
         border: "1px solid var(--border-hairline)",
       }} />
+      <label title="Select for batch reconvert" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, flexShrink: 0 }}>
+        <input
+          type="checkbox"
+          checked={selected}
+          aria-label={`Select ${track.title} for batch reconvert`}
+          onChange={() => onToggleSelect?.(track.id)}
+          style={{ width: 15, height: 15, margin: 0, accentColor: "var(--accent-primary)" }}
+        />
+      </label>
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ fontSize: "var(--text-body)", fontWeight: "var(--weight-medium)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{track.title}</div>
         <div style={{ fontFamily: "var(--font-typewriter)", fontSize: "var(--text-xs)", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {track.artist}{track.album ? ` · ${track.album}` : ""}
         </div>
+        {issueLabels.length > 0 && (
+          <div style={{ display: "flex", gap: 5, marginTop: 4, flexWrap: "wrap" }}>
+            {issueLabels.map((label) => <Badge key={label} tone="warning">{label}</Badge>)}
+          </div>
+        )}
       </div>
       <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
-        <Badge tone={metaTone}>{track.metadataStatus === "complete" ? "Tags ✓" : "Tags?"}</Badge>
-        <Badge tone={artTone}>{track.artworkStatus === "missing" ? "No art" : "Art ✓"}</Badge>
-        {aiApproving ? <Badge tone="info">AI fixing...</Badge> : <SyncStatusBadge track={track} />}
+        {aiApproving && <Badge tone="info">AI fixing...</Badge>}
         {approved && aiConfidence !== null && track.aiMetadataStatus === "approved" && (
           <Badge tone="info">AI {aiConfidence}%</Badge>
         )}
         <Button size="sm" variant="ghost" disabled={aiApproving || deleting} onClick={() => onEdit(track)}>Edit</Button>
+        <Button size="sm" variant="secondary" disabled={aiApproving || deleting} onClick={() => onAudioIssues?.(track)}>Flag issue</Button>
+        {repairNeeded && <Button size="sm" variant="secondary" disabled={aiApproving || deleting} onClick={() => onAudioRepair?.([track])}>Repair</Button>}
+        <Button size="sm" variant="secondary" disabled={aiApproving || deleting} onClick={() => onReconvert?.([track])}>Reconvert</Button>
         {!approved && (
           <Button size="sm" variant="secondary" disabled={approving || aiApproving || deleting} onClick={() => onApprove(track)}>
             {approving ? "Approving..." : "Approve"}
@@ -114,7 +130,7 @@ function TrackRow({ track, onEdit, onApprove, onRemove, approving, aiApproving, 
 }
 
 /** Step 4 — integrated iPod Sync workflow screen. */
-export function SyncView({ tracks, helper, ipod, actions, onShowToast, onEdit, onRemove }) {
+export function SyncView({ tracks, helper, ipod, actions, onShowToast, onEdit, onRemove, selectedIds = new Set(), onToggleSelect, onSelectTracks, onReconvert, onAudioIssues, onAudioRepair, onAudioAnalyze, audioIssueFilter = {}, onAudioIssueFilterChange }) {
   const [busy, setBusy] = React.useState(false);
   const [approvingId, setApprovingId] = React.useState("");
   const [aiApprovingId, setAiApprovingId] = React.useState("");
@@ -129,7 +145,11 @@ export function SyncView({ tracks, helper, ipod, actions, onShowToast, onEdit, o
   }, [helper.connected, refreshIpod]);
 
   const complete = tracks.filter((t) => t.status === "complete");
-  const visibleComplete = sortForSyncTracks(complete);
+  const visibleComplete = filterByAudioIssues(sortForSyncTracks(complete), audioIssueFilter);
+  const selectedVisibleComplete = visibleComplete.filter((t) => selectedIds.has(t.id));
+  const allVisibleSelected = Boolean(visibleComplete.length && selectedVisibleComplete.length === visibleComplete.length);
+  const bassFlagged = complete.filter((track) => hasAudioIssue(track, "bass_crackle"));
+  const leftFlagged = complete.filter((track) => hasAudioIssue(track, "left_channel_disturbance"));
   const needsReview = visibleComplete.filter((t) => t.metadataReviewStatus !== "approved");
   const approved = complete.filter((t) => t.metadataReviewStatus === "approved");
   const readyToHandoff = approved.filter((t) => t.outputPath && t.exportStatus !== "invalid");
@@ -233,6 +253,11 @@ export function SyncView({ tracks, helper, ipod, actions, onShowToast, onEdit, o
     }
   };
 
+  const onToggleAllVisible = () => {
+    if (!visibleComplete.length) return;
+    onSelectTracks?.(allVisibleSelected ? [] : visibleComplete.map((track) => track.id));
+  };
+
   return (
     <div className="il-sync-view" style={{ display: "grid", gap: 16, padding: "4px 0 40px" }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "stretch" }}>
@@ -295,8 +320,37 @@ export function SyncView({ tracks, helper, ipod, actions, onShowToast, onEdit, o
             >
               {aiBatchBusy ? "AI approving..." : needsReview.length ? `AI approve ${needsReview.length} unreviewed` : "AI approvals done"}
             </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={!visibleComplete.length}
+              onClick={onToggleAllVisible}
+            >
+              {allVisibleSelected ? "Clear selection" : "Select all"}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={!helper.connected || !selectedVisibleComplete.length}
+              onClick={() => onReconvert?.(selectedVisibleComplete)}
+            >
+              {selectedVisibleComplete.length ? `Rebuild ${selectedVisibleComplete.length} as Bass Safe` : "Pick tracks"}
+            </Button>
             <Badge tone={needsReview.length ? "warning" : "success"}>{needsReview.length ? `${needsReview.length} need review` : `${approved.length} approved`}</Badge>
-            <Badge tone="neutral">{complete.length} converted</Badge>
+          </span>
+        </div>
+        <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--border-hairline)", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", background: "var(--surface-recessed)" }}>
+          <AudioIssueFilters value={audioIssueFilter} onChange={onAudioIssueFilterChange} compact />
+          <span style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Button size="sm" variant="secondary" disabled={!helper.connected || !selectedVisibleComplete.length} onClick={() => onAudioAnalyze?.(selectedVisibleComplete)}>
+              Analyze selected
+            </Button>
+            <Button size="sm" variant="secondary" disabled={!helper.connected || !bassFlagged.length} onClick={() => onAudioRepair?.(bassFlagged, "bass-safe-plus")}>
+              Bass Safe Plus {bassFlagged.length || ""}
+            </Button>
+            <Button size="sm" variant="secondary" disabled={!helper.connected || !leftFlagged.length} onClick={() => onAudioRepair?.(leftFlagged, "stereo-blend-safe")}>
+              Stereo Blend {leftFlagged.length || ""}
+            </Button>
           </span>
         </div>
         {complete.length ? (
@@ -308,6 +362,11 @@ export function SyncView({ tracks, helper, ipod, actions, onShowToast, onEdit, o
                   track={track}
                   onEdit={onEdit}
                   onApprove={onApprove}
+                  onReconvert={onReconvert}
+                  onAudioIssues={onAudioIssues}
+                  onAudioRepair={onAudioRepair}
+                  selected={selectedIds.has(track.id)}
+                  onToggleSelect={onToggleSelect}
                   onRemove={async (item) => {
                     setDeletingId(item.id);
                     try {
@@ -325,7 +384,7 @@ export function SyncView({ tracks, helper, ipod, actions, onShowToast, onEdit, o
           </div>
         ) : (
           <div style={{ padding: 20, fontFamily: "var(--font-typewriter)", fontSize: "var(--text-xs)", color: "var(--text-secondary)" }}>
-            No converted tracks yet. Convert some YouTube links first, then come back to sync.
+            No tracks yet. Add YouTube links first, then come back here.
           </div>
         )}
       </Card>

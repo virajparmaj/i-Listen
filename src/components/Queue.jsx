@@ -3,12 +3,16 @@ import { Card } from "./ui/Card.jsx";
 import { Button } from "./ui/Button.jsx";
 import { Icon } from "./ui/Icon.jsx";
 import { QueueRow } from "./QueueRow.jsx";
+import { AudioIssueFilters } from "./AudioIssueFilters.jsx";
+import { filterByAudioIssues, hasAudioIssue } from "../utils/audioRepair.js";
 import { sortForConversionQueue } from "../utils/trackOrdering.js";
 
-export function Queue({ tracks, onEdit, onArt, onDownload, onRetry, onRemove, onCancel, onClear, locked = false, selectedIds = new Set(), onToggleSelect }) {
+export function Queue({ tracks, onEdit, onArt, onDownload, onRetry, onRemove, onCancel, onReconvert, onAudioIssues, onAudioRepair, onClear, locked = false, selectedIds = new Set(), onToggleSelect, audioIssueFilter = {}, onAudioIssueFilterChange }) {
   const done = tracks.filter((t) => t.status === "complete").length;
   const failed = tracks.filter((t) => t.status === "failed").length;
-  const visibleTracks = sortForConversionQueue(tracks);
+  const visibleTracks = filterByAudioIssues(sortForConversionQueue(tracks), audioIssueFilter);
+  const bassFlagged = tracks.filter((track) => track.status === "complete" && hasAudioIssue(track, "bass_crackle"));
+  const leftFlagged = tracks.filter((track) => track.status === "complete" && hasAudioIssue(track, "left_channel_disturbance"));
 
   return (
     <Card className="il-queue-card" style={{ padding: 0, overflow: "hidden" }}>
@@ -21,6 +25,17 @@ export function Queue({ tracks, onEdit, onArt, onDownload, onRetry, onRemove, on
           </span>
           <Button size="sm" variant="ghost" onClick={onClear} disabled={!done || locked}>Clear done</Button>
         </div>
+      </div>
+      <div style={{ padding: "10px 18px", borderBottom: "1px solid var(--border-soft)", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", background: "var(--surface-recessed)" }}>
+        <AudioIssueFilters value={audioIssueFilter} onChange={onAudioIssueFilterChange} compact />
+        <span style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Button size="sm" variant="secondary" disabled={locked || !bassFlagged.length} onClick={() => onAudioRepair?.(bassFlagged, "bass-safe-plus")}>
+            Bass Safe Plus {bassFlagged.length || ""}
+          </Button>
+          <Button size="sm" variant="secondary" disabled={locked || !leftFlagged.length} onClick={() => onAudioRepair?.(leftFlagged, "stereo-blend-safe")}>
+            Stereo Blend {leftFlagged.length || ""}
+          </Button>
+        </span>
       </div>
 
       {tracks.length === 0 ? (
@@ -42,6 +57,9 @@ export function Queue({ tracks, onEdit, onArt, onDownload, onRetry, onRemove, on
               onRetry={onRetry}
               onRemove={onRemove}
               onCancel={onCancel}
+              onReconvert={onReconvert}
+              onAudioIssues={onAudioIssues}
+              onAudioRepair={onAudioRepair}
               locked={locked}
               selected={selectedIds.has(t.id)}
               onToggleSelect={onToggleSelect}

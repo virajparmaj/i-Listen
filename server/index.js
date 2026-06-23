@@ -1,4 +1,4 @@
-import { createReadStream } from "node:fs";
+import { createReadStream, existsSync } from "node:fs";
 import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { createServer, request as httpRequest } from "node:http";
 import { randomBytes } from "node:crypto";
@@ -6,7 +6,8 @@ import { spawn } from "node:child_process";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { addLog, addMetadataExample, createJobs, createJobsFromMatches, existingTrackKeys, getJob, getState, listJobs, listLogs, listMetadataExamples, openDatabase, removeJob, setState, trackKey, updateJob } from "./lib/db.js";
-import { JobRunner, writePlaylists } from "./lib/converter.js";
+import { AUDIO_REPAIR_PRESETS, JobRunner, reconvertExistingJob, writePlaylists } from "./lib/converter.js";
+import { analyzeAudio } from "./lib/audioAnalysis.js";
 import { parseLibraryXml } from "./lib/libraryXml.js";
 import { searchTracks } from "./lib/youtubeSearch.js";
 import { isYoutubeUrl } from "./lib/youtube.js";
@@ -30,6 +31,9 @@ import { splitYoutubeUrls } from "./lib/youtube.js";
 
 const PORT = Number(process.env.ILISTEN_PORT || 4317);
 const AI_METADATA_HEALTH_CACHE_MS = 30000;
+const RECONVERT_OUTPUT_OPTIONS = new Set(["best-youtube", "ipod-safe-aac", "mp3-v0", "aac-256", "alac"]);
+const AUDIO_ISSUE_TAGS = new Set(["bass_crackle", "left_channel_disturbance"]);
+const ACTIVE_AUDIO_REPAIR_STATUSES = new Set(["analyzing", "repair_queued", "repairing"]);
 
 function parseAllowedOrigins(value = process.env.ILISTEN_ALLOWED_ORIGINS || "") {
   return new Set(String(value)
@@ -520,6 +524,333 @@ async function runRetag(state, id) {
   emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
 }
 
+function resolveReconvertOutputOption(job, body = {}) {
+  const outputOption = String(body.outputOption || job?.outputOption || "best-youtube");
+  if (!RECONVERT_OUTPUT_OPTIONS.has(outputOption)) {
+    return { ok: false, error: `Unsupported reconvert output option: ${outputOption}` };
+  }
+  return { ok: true, outputOption };
+}
+
+function validateReconvertRequest(state, job) {
+  if (!job) return { ok: false, status: 404, error: "Job not found" };
+  if (state.reconverting?.has(job.id) || job.conversionStatus === "reconvert_queued" || (job.status === "converting" && job.conversionStatus === "converting")) {
+    return { ok: false, status: 409, error: "Reconvert is already running for this track." };
+  }
+  if (job.status !== "complete" || !job.outputPath) {
+    return { ok: false, status: 400, error: "Track must be completed before it can be reconverted." };
+  }
+  if (!state.tools?.ffmpeg?.ok || !state.tools?.ffprobe?.ok) {
+    return { ok: false, status: 409, error: "ffmpeg and ffprobe are required to reconvert existing tracks." };
+  }
+
+  const hasSource = Boolean(job.sourcePath && existsSync(job.sourcePath));
+  if (!hasSource && !job.url) {
+    return { ok: false, status: 400, error: "Original source file is missing and this job has no saved YouTube URL." };
+  }
+  if (!hasSource && !state.tools?.ytdlp?.ok) {
+    return { ok: false, status: 409, error: "yt-dlp is required because the original downloaded source file is missing." };
+  }
+  return { ok: true };
+}
+
+function markReconvertQueued(state, job) {
+  return updateJob(state.db, job.id, {
+    status: "complete",
+    conversionStatus: "reconvert_queued",
+    progress: 0,
+    error: "",
+    lastError: "",
+    warning: "",
+  });
+}
+
+async function runReconvert(state, job, { outputOption, replaceExisting = true } = {}) {
+  if (!state.reconverting) state.reconverting = new Set();
+  if (state.reconverting.has(job.id)) {
+    return { id: job.id, ok: false, error: "Reconvert is already running for this track." };
+  }
+  state.reconverting.add(job.id);
+
+  updateJob(state.db, job.id, {
+    status: "converting",
+    conversionStatus: "converting",
+    progress: 42,
+    error: "",
+    lastError: "",
+    warning: "",
+  });
+  addLog(state.db, `Reconvert started for ${job.artist} — ${job.title}.`, null, "Reconvert:");
+  emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+
+  const runHelper = state.reconvertExistingJob || reconvertExistingJob;
+  try {
+    const result = await runHelper({
+      project: state.project,
+      tools: state.tools,
+      job,
+      outputOption,
+      replaceExisting,
+      onLog: (msg, kind, label) => {
+        addLog(state.db, msg, kind || null, label || "FFmpeg:");
+        emit(state, { type: "logs", logs: listLogs(state.db) });
+      },
+    });
+
+    const reviewStatus = job.metadataReviewStatus || "needs_review";
+    const updated = updateJob(state.db, job.id, {
+      outputOption,
+      status: "complete",
+      conversionStatus: "complete",
+      progress: 100,
+      sourcePath: result.sourcePath || job.sourcePath,
+      sourceCodec: result.sourceCodec || "",
+      sourceContainer: result.sourceContainer || "",
+      selectedOutput: result.selectedOutput || "",
+      outputPath: result.outputPath || job.outputPath,
+      durationSec: result.durationSec,
+      sizeBytes: result.sizeBytes,
+      exportStatus: "validated",
+      metadataStatus: result.metadataStatus || job.metadataStatus,
+      artworkStatus: result.artworkStatus || job.artworkStatus,
+      metadataReviewStatus: reviewStatus,
+      appleMusicImportStatus: "pending",
+      appleMusicPlaylistStatus: "pending",
+      readyForFinderSync: 0,
+      syncState: "",
+      musicPersistentId: "",
+      error: "",
+      lastError: "",
+      warning: result.warning || "",
+    });
+
+    const sourceLabel = result.usedSavedSource ? "saved source" : "saved YouTube link";
+    addLog(state.db, `Reconverted ${updated.artist} — ${updated.title} from ${sourceLabel}; add it to Apple Music again.`, "ok", "Reconvert:");
+    if (result.archivedOutputPath) {
+      addLog(state.db, `Archived previous export at ${result.archivedOutputPath}.`, "ok", "Reconvert:");
+    }
+    emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+    return {
+      id: job.id,
+      ok: true,
+      outputPath: updated.outputPath,
+      archivedOutputPath: result.archivedOutputPath || "",
+      source: result.usedSavedSource ? "sourcePath" : "url",
+    };
+  } catch (error) {
+    updateJob(state.db, job.id, {
+      status: job.status,
+      conversionStatus: "failed",
+      progress: job.progress || 100,
+      outputOption: job.outputOption,
+      outputPath: job.outputPath,
+      sourcePath: job.sourcePath,
+      sourceCodec: job.sourceCodec,
+      sourceContainer: job.sourceContainer,
+      selectedOutput: job.selectedOutput,
+      exportStatus: job.exportStatus,
+      metadataStatus: job.metadataStatus,
+      artworkStatus: job.artworkStatus,
+      appleMusicImportStatus: job.appleMusicImportStatus,
+      appleMusicPlaylistStatus: job.appleMusicPlaylistStatus,
+      readyForFinderSync: job.readyForFinderSync,
+      syncState: job.syncState,
+      musicPersistentId: job.musicPersistentId,
+      error: "",
+      lastError: error.message,
+      warning: job.warning || "",
+    });
+    addLog(state.db, `Reconvert failed for ${job.artist} — ${job.title}: ${error.message}`, "err", "Reconvert:");
+    emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+    return { id: job.id, ok: false, error: error.message };
+  } finally {
+    state.reconverting.delete(job.id);
+  }
+}
+
+function startReconvertBatchInBackground(state, items) {
+  void (async () => {
+    for (const item of items) {
+      await runReconvert(state, item.job, {
+        outputOption: item.outputOption,
+        replaceExisting: item.replaceExisting,
+      });
+    }
+  })().catch((error) => {
+    addLog(state.db, `Reconvert queue stopped: ${error.message}`, "err", "Reconvert:");
+    emit(state, { type: "logs", logs: listLogs(state.db) });
+  });
+}
+
+function normalizeAudioIssueTags(tags) {
+  const seen = new Set();
+  const normalized = [];
+  (Array.isArray(tags) ? tags : []).forEach((tag) => {
+    const value = String(tag || "").trim();
+    if (!AUDIO_ISSUE_TAGS.has(value) || seen.has(value)) return;
+    seen.add(value);
+    normalized.push(value);
+  });
+  return normalized;
+}
+
+function defaultAudioRepairPreset(job) {
+  const tags = new Set(job?.audioIssueTags || []);
+  if (tags.has("bass_crackle")) return "bass-safe-plus";
+  if (tags.has("left_channel_disturbance")) return "stereo-blend-safe";
+  return "bass-safe-plus";
+}
+
+function resolveAudioRepairPreset(job, body = {}) {
+  const preset = String(body.preset || job?.audioRepairPreset || defaultAudioRepairPreset(job));
+  if (!AUDIO_REPAIR_PRESETS[preset]) {
+    return { ok: false, error: `Unsupported audio repair preset: ${preset}` };
+  }
+  return { ok: true, preset };
+}
+
+function validateAudioAnalyzeRequest(state, job) {
+  if (!job) return { ok: false, status: 404, error: "Job not found" };
+  if (ACTIVE_AUDIO_REPAIR_STATUSES.has(job.audioRepairStatus)) {
+    return { ok: false, status: 409, error: "Audio repair is already running for this track." };
+  }
+  if (job.status !== "complete" || !job.outputPath) {
+    return { ok: false, status: 400, error: "Track must be completed before audio analysis." };
+  }
+  if (!state.tools?.ffmpeg?.ok || !state.tools?.ffprobe?.ok) {
+    return { ok: false, status: 409, error: "ffmpeg and ffprobe are required to analyze audio." };
+  }
+  if (!existsSync(job.outputPath)) {
+    return { ok: false, status: 400, error: "Cannot analyze audio: exported file is missing." };
+  }
+  return { ok: true };
+}
+
+function validateAudioRepairRequest(state, job) {
+  const validation = validateReconvertRequest(state, job);
+  if (!validation.ok) return validation;
+  if (ACTIVE_AUDIO_REPAIR_STATUSES.has(job.audioRepairStatus)) {
+    return { ok: false, status: 409, error: "Audio repair is already running for this track." };
+  }
+  return { ok: true };
+}
+
+function audioAnalysisPayload(kind, analysis, previous = {}) {
+  const base = previous && typeof previous === "object" && !Array.isArray(previous) ? previous : {};
+  return {
+    ...base,
+    [kind]: analysis,
+    analyzedAt: analysis?.analyzedAt || isoNow(),
+    summary: analysis?.summary || [],
+    flags: analysis?.flags || {},
+  };
+}
+
+async function runAudioAnalyze(state, job) {
+  const analyze = state.analyzeAudio || analyzeAudio;
+  updateJob(state.db, job.id, {
+    audioRepairStatus: "analyzing",
+    lastError: "",
+  });
+  addLog(state.db, `Audio analysis started for ${job.artist} — ${job.title}.`, null, "Audio:");
+  emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+
+  try {
+    const analysis = await analyze({ tools: state.tools, inputPath: job.outputPath });
+    const nextStatus = (job.audioIssueTags || []).length ? "needs_repair" : (job.audioRepairStatus === "cleared" ? "cleared" : "");
+    const updated = updateJob(state.db, job.id, {
+      audioRepairStatus: nextStatus,
+      audioAnalysis: audioAnalysisPayload("current", analysis, job.audioAnalysis),
+      lastError: "",
+    });
+    const summary = analysis.summary?.length ? analysis.summary.join("; ") : "no obvious channel/peak issue";
+    addLog(state.db, `Audio analysis for ${updated.artist} — ${updated.title}: ${summary}.`, "ok", "Audio:");
+    emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+    return { id: job.id, ok: true, analysis: updated.audioAnalysis, summary: analysis.summary || [] };
+  } catch (error) {
+    const updated = updateJob(state.db, job.id, {
+      audioRepairStatus: "failed",
+      lastError: error.message,
+    });
+    addLog(state.db, `Audio analysis failed for ${job.artist} — ${job.title}: ${error.message}`, "err", "Audio:");
+    emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+    return { id: job.id, ok: false, error: error.message, job: updated };
+  }
+}
+
+function markAudioRepairQueued(state, job, preset) {
+  markReconvertQueued(state, job);
+  return updateJob(state.db, job.id, {
+    audioRepairPreset: preset,
+    audioRepairStatus: "repair_queued",
+    error: "",
+    lastError: "",
+  });
+}
+
+async function safeAnalyzeForRepair(state, job, kind) {
+  if (!job?.outputPath || !existsSync(job.outputPath)) return null;
+  const analyze = state.analyzeAudio || analyzeAudio;
+  try {
+    return await analyze({ tools: state.tools, inputPath: job.outputPath, kind });
+  } catch (error) {
+    addLog(state.db, `Audio ${kind} analysis skipped for ${job.artist} — ${job.title}: ${error.message}`, "warn", "Audio:");
+    return { error: error.message, analyzedAt: isoNow(), summary: [] };
+  }
+}
+
+async function runAudioRepair(state, job, { preset, replaceExisting = true } = {}) {
+  const before = await safeAnalyzeForRepair(state, job, "before");
+  updateJob(state.db, job.id, {
+    audioRepairPreset: preset,
+    audioRepairStatus: "repairing",
+    audioAnalysis: before ? audioAnalysisPayload("before", before, job.audioAnalysis) : job.audioAnalysis,
+    lastError: "",
+  });
+  emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+
+  const result = await runReconvert(state, job, { outputOption: preset, replaceExisting });
+  if (!result.ok) {
+    const failed = updateJob(state.db, job.id, {
+      audioRepairPreset: preset,
+      audioRepairStatus: "failed",
+      lastError: result.error || "Audio repair failed.",
+    });
+    emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+    return { ...result, job: failed };
+  }
+
+  const repairedJob = getJob(state.db, job.id);
+  const after = await safeAnalyzeForRepair(state, repairedJob, "after");
+  const analysis = after
+    ? audioAnalysisPayload("after", after, audioAnalysisPayload("before", before, repairedJob.audioAnalysis))
+    : repairedJob.audioAnalysis;
+  const updated = updateJob(state.db, job.id, {
+    audioIssueTags: [],
+    audioRepairPreset: preset,
+    audioRepairStatus: "repaired",
+    audioAnalysis: analysis,
+    lastError: "",
+  });
+  addLog(state.db, `Audio repair complete for ${updated.artist} — ${updated.title}.`, "ok", "Audio:");
+  emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+  return { ...result, job: updated, audioRepairStatus: "repaired", audioAnalysis: updated.audioAnalysis };
+}
+
+function startAudioRepairBatchInBackground(state, items) {
+  void (async () => {
+    for (const item of items) {
+      await runAudioRepair(state, item.job, {
+        preset: item.preset,
+        replaceExisting: item.replaceExisting,
+      });
+    }
+  })().catch((error) => {
+    addLog(state.db, `Audio repair queue stopped: ${error.message}`, "err", "Audio:");
+    emit(state, { type: "logs", logs: listLogs(state.db) });
+  });
+}
+
 /**
  * Decode a base64 image data URL and persist it as the job's custom cover.
  * @returns {Promise<{ ok: boolean, path?: string, error?: string }>}
@@ -773,9 +1104,242 @@ export async function route(req, res, state, allowedOrigins) {
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/jobs/audio-repair") {
+    const body = await readJson(req);
+    const ids = Array.isArray(body.ids) ? body.ids.map((id) => String(id || "").trim()).filter(Boolean) : [];
+    if (!ids.length) {
+      send(res, req, allowedOrigins, 400, { error: "Select one or more tracks for audio repair." });
+      return;
+    }
+
+    const results = [];
+    if (body.analyzeOnly) {
+      for (const id of ids) {
+        const job = getJob(state.db, id);
+        const validation = validateAudioAnalyzeRequest(state, job);
+        if (!validation.ok) {
+          results.push({ id, ok: false, error: validation.error });
+          continue;
+        }
+        results.push(await runAudioAnalyze(state, job));
+      }
+      const okCount = results.filter((item) => item.ok).length;
+      send(res, req, allowedOrigins, okCount ? 200 : 400, {
+        results,
+        jobs: listJobs(state.db),
+        logs: listLogs(state.db),
+        error: okCount ? undefined : "No selected tracks could be analyzed.",
+      });
+      return;
+    }
+
+    const accepted = [];
+    for (const id of ids) {
+      const job = getJob(state.db, id);
+      const validation = validateAudioRepairRequest(state, job);
+      if (!validation.ok) {
+        results.push({ id, ok: false, error: validation.error });
+        continue;
+      }
+      const preset = resolveAudioRepairPreset(job, body);
+      if (!preset.ok) {
+        results.push({ id, ok: false, error: preset.error });
+        continue;
+      }
+      markAudioRepairQueued(state, job, preset.preset);
+      accepted.push({
+        job,
+        preset: preset.preset,
+        replaceExisting: body.replaceExisting !== false,
+      });
+      results.push({ id, accepted: true });
+    }
+
+    if (accepted.length) {
+      addLog(state.db, `Queued ${accepted.length} audio repair job${accepted.length === 1 ? "" : "s"}.`, null, "Audio:");
+      emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+      startAudioRepairBatchInBackground(state, accepted);
+      send(res, req, allowedOrigins, 202, { accepted: accepted.length, results, jobs: listJobs(state.db), logs: listLogs(state.db) });
+      return;
+    }
+
+    send(res, req, allowedOrigins, 400, { error: "No selected tracks could be repaired.", results, jobs: listJobs(state.db), logs: listLogs(state.db) });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/jobs/reconvert") {
+    const body = await readJson(req);
+    const ids = Array.isArray(body.ids) ? body.ids.map((id) => String(id || "").trim()).filter(Boolean) : [];
+    if (!ids.length) {
+      send(res, req, allowedOrigins, 400, { error: "Select one or more completed tracks to reconvert." });
+      return;
+    }
+
+    const results = [];
+    const accepted = [];
+    for (const id of ids) {
+      const job = getJob(state.db, id);
+      const validation = validateReconvertRequest(state, job);
+      if (!validation.ok) {
+        results.push({ id, ok: false, error: validation.error });
+        continue;
+      }
+      const option = resolveReconvertOutputOption(job, body);
+      if (!option.ok) {
+        results.push({ id, ok: false, error: option.error });
+        continue;
+      }
+      markReconvertQueued(state, job);
+      accepted.push({
+        job,
+        outputOption: option.outputOption,
+        replaceExisting: body.replaceExisting !== false,
+      });
+      results.push({ id, accepted: true });
+    }
+
+    if (accepted.length) {
+      addLog(state.db, `Queued ${accepted.length} reconvert job${accepted.length === 1 ? "" : "s"}.`, null, "Reconvert:");
+      emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+      startReconvertBatchInBackground(state, accepted);
+      send(res, req, allowedOrigins, 202, { accepted: accepted.length, results, jobs: listJobs(state.db), logs: listLogs(state.db) });
+      return;
+    }
+
+    send(res, req, allowedOrigins, 400, { error: "No selected tracks could be reconverted.", results, jobs: listJobs(state.db), logs: listLogs(state.db) });
+    return;
+  }
+
   if (jobMatch) {
     const [, id, action] = jobMatch;
     const job = getJob(state.db, id);
+
+    if (req.method === "PATCH" && action === "audio-issues") {
+      if (!job) {
+        send(res, req, allowedOrigins, 404, { error: "Job not found" });
+        return;
+      }
+      const body = await readJson(req);
+      const rawTags = body.cleared
+        ? []
+        : Array.isArray(body.audioIssueTags)
+          ? body.audioIssueTags.map((tag) => String(tag || "").trim()).filter(Boolean)
+          : job.audioIssueTags || [];
+      const invalid = rawTags.filter((tag) => !AUDIO_ISSUE_TAGS.has(tag));
+      if (invalid.length) {
+        send(res, req, allowedOrigins, 400, { error: `Unsupported audio issue tag: ${invalid[0]}` });
+        return;
+      }
+
+      const audioIssueTags = normalizeAudioIssueTags(rawTags);
+      const audioRepairStatus = body.cleared || !audioIssueTags.length
+        ? "cleared"
+        : ACTIVE_AUDIO_REPAIR_STATUSES.has(job.audioRepairStatus)
+          ? job.audioRepairStatus
+          : "needs_repair";
+      const patch = {
+        audioIssueTags,
+        audioRepairStatus,
+      };
+      if (Object.prototype.hasOwnProperty.call(body, "audioRepairNotes")) {
+        patch.audioRepairNotes = String(body.audioRepairNotes || "");
+      }
+
+      const updated = updateJob(state.db, id, patch);
+      addLog(
+        state.db,
+        audioIssueTags.length
+          ? `Flagged audio issue for ${updated.artist} — ${updated.title}.`
+          : `Cleared audio issue flags for ${updated.artist} — ${updated.title}.`,
+        audioIssueTags.length ? "warn" : "ok",
+        "Audio:"
+      );
+      emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+      send(res, req, allowedOrigins, 200, { job: updated, jobs: listJobs(state.db), logs: listLogs(state.db) });
+      return;
+    }
+
+    if (req.method === "POST" && action === "audio-repair") {
+      if (!job) {
+        send(res, req, allowedOrigins, 404, { error: "Job not found" });
+        return;
+      }
+      const body = await readJson(req);
+      if (body.analyzeOnly) {
+        const validation = validateAudioAnalyzeRequest(state, job);
+        if (!validation.ok) {
+          send(res, req, allowedOrigins, validation.status, { error: validation.error });
+          return;
+        }
+        const result = await runAudioAnalyze(state, job);
+        send(res, req, allowedOrigins, result.ok ? 200 : 500, {
+          result,
+          job: getJob(state.db, id),
+          jobs: listJobs(state.db),
+          logs: listLogs(state.db),
+        });
+        return;
+      }
+
+      const validation = validateAudioRepairRequest(state, job);
+      if (!validation.ok) {
+        send(res, req, allowedOrigins, validation.status, { error: validation.error });
+        return;
+      }
+      const preset = resolveAudioRepairPreset(job, body);
+      if (!preset.ok) {
+        send(res, req, allowedOrigins, 400, { error: preset.error });
+        return;
+      }
+
+      markAudioRepairQueued(state, job, preset.preset);
+      addLog(state.db, `Queued audio repair for ${job.artist} — ${job.title}.`, null, "Audio:");
+      emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+      startAudioRepairBatchInBackground(state, [{
+        job,
+        preset: preset.preset,
+        replaceExisting: body.replaceExisting !== false,
+      }]);
+      send(res, req, allowedOrigins, 202, {
+        accepted: 1,
+        result: { id, accepted: true },
+        job: getJob(state.db, id),
+        jobs: listJobs(state.db),
+        logs: listLogs(state.db),
+      });
+      return;
+    }
+
+    if (req.method === "POST" && action === "reconvert") {
+      const validation = validateReconvertRequest(state, job);
+      if (!validation.ok) {
+        send(res, req, allowedOrigins, validation.status, { error: validation.error });
+        return;
+      }
+      const body = await readJson(req);
+      const option = resolveReconvertOutputOption(job, body);
+      if (!option.ok) {
+        send(res, req, allowedOrigins, 400, { error: option.error });
+        return;
+      }
+
+      markReconvertQueued(state, job);
+      addLog(state.db, `Queued reconvert for ${job.artist} — ${job.title}.`, null, "Reconvert:");
+      emit(state, { type: "jobs", jobs: listJobs(state.db), logs: listLogs(state.db) });
+      startReconvertBatchInBackground(state, [{
+        job,
+        outputOption: option.outputOption,
+        replaceExisting: body.replaceExisting !== false,
+      }]);
+      send(res, req, allowedOrigins, 202, {
+        accepted: 1,
+        result: { id, accepted: true },
+        job: getJob(state.db, id),
+        jobs: listJobs(state.db),
+        logs: listLogs(state.db),
+      });
+      return;
+    }
 
     if (req.method === "POST" && action === "ai-approve") {
       if (!job) {

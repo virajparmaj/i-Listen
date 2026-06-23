@@ -1,68 +1,84 @@
 import React from "react";
 import { Card } from "./ui/Card.jsx";
 import { Button } from "./ui/Button.jsx";
+import { Badge } from "./ui/Badge.jsx";
 import { Icon } from "./ui/Icon.jsx";
 import { ArtworkThumb } from "./ArtworkThumb.jsx";
 import { libraryEntries } from "../utils/download.js";
+import { AudioIssueFilters } from "./AudioIssueFilters.jsx";
+import { audioIssueLabels, filterByAudioIssues, hasAudioIssue, needsAudioRepair } from "../utils/audioRepair.js";
 
-function CoverTile({ track, playable, selected, playing, onSelect }) {
+function CoverTile({ track, playable, selected, playing, onSelect, onAudioIssues, onAudioRepair }) {
+  const issueLabels = audioIssueLabels(track);
+  const repairNeeded = needsAudioRepair(track);
   return (
-    <button
-      type="button"
-      disabled={!playable}
-      onClick={() => onSelect(track)}
-      style={{
-        width: "100%",
-        padding: 0,
-        background: "transparent",
-        border: "none",
-        textAlign: "left",
-        cursor: playable ? "pointer" : "default",
-        opacity: playable ? 1 : 0.78,
-      }}
-    >
-      <div style={{
-        position: "relative",
-        aspectRatio: "1 / 1",
-        borderRadius: "var(--radius-sm)",
-        overflow: "hidden",
-        border: "1px solid var(--border-strong)",
-        boxShadow: "var(--shadow-card)",
-        outline: selected ? "2px solid var(--accent-primary)" : "none",
-        outlineOffset: selected ? "-2px" : "0",
-      }}>
-        <ArtworkThumb
-          primarySrc={track.coverArt}
-          fallbackSrc={track.thumbnailUrl}
-          thumbColor={track.thumbColor}
-          alt={`${track.title} cover`}
-          iconSize={30}
-          style={{ width: "100%", height: "100%" }}
-        />
-        {playable && (
-          <div style={{
-            position: "absolute",
-            right: 8,
-            bottom: 8,
-            width: 28,
-            height: 28,
-            borderRadius: "50%",
-            background: "rgba(17, 24, 39, 0.78)",
-            border: "1px solid rgba(255,255,255,0.24)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}>
-            <Icon name={selected && playing ? "pause" : "play"} size={12} color="#F9FAFB" emboss={false} />
-          </div>
-        )}
+    <div style={{ display: "grid", gap: 7, minWidth: 0 }}>
+      <button
+        type="button"
+        disabled={!playable}
+        onClick={() => onSelect(track)}
+        style={{
+          width: "100%",
+          padding: 0,
+          background: "transparent",
+          border: "none",
+          textAlign: "left",
+          cursor: playable ? "pointer" : "default",
+          opacity: playable ? 1 : 0.78,
+        }}
+      >
+        <div style={{
+          position: "relative",
+          aspectRatio: "1 / 1",
+          borderRadius: "var(--radius-sm)",
+          overflow: "hidden",
+          border: "1px solid var(--border-strong)",
+          boxShadow: "var(--shadow-card)",
+          outline: selected ? "2px solid var(--accent-primary)" : "none",
+          outlineOffset: selected ? "-2px" : "0",
+        }}>
+          <ArtworkThumb
+            primarySrc={track.coverArt}
+            fallbackSrc={track.thumbnailUrl}
+            thumbColor={track.thumbColor}
+            alt={`${track.title} cover`}
+            iconSize={30}
+            style={{ width: "100%", height: "100%" }}
+          />
+          {playable && (
+            <div style={{
+              position: "absolute",
+              right: 8,
+              bottom: 8,
+              width: 28,
+              height: 28,
+              borderRadius: "50%",
+              background: "rgba(17, 24, 39, 0.78)",
+              border: "1px solid rgba(255,255,255,0.24)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}>
+              <Icon name={selected && playing ? "pause" : "play"} size={12} color="#F9FAFB" emboss={false} />
+            </div>
+          )}
+        </div>
+        <div style={{ marginTop: 8, fontSize: "var(--text-sm)", fontWeight: "var(--weight-semibold)", color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{track.title}</div>
+        <div style={{ fontFamily: "var(--font-typewriter)", fontSize: "var(--text-xs)", color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{track.artist} · {track.qualityLabel || track.format.toUpperCase()}</div>
+        <div style={{ marginTop: 4, fontFamily: "var(--font-typewriter)", fontSize: "var(--text-xs)", color: playable ? "var(--accent-primary)" : "var(--text-secondary)" }}>
+          {!playable ? "Preview unavailable" : selected ? (playing ? "Pause preview" : "Play preview") : "Play preview"}
+        </div>
+      </button>
+      {issueLabels.length > 0 && (
+        <div style={{ display: "flex", gap: 5, flexWrap: "wrap", minHeight: 18 }}>
+          {issueLabels.map((label) => <Badge key={label} tone="warning">{label}</Badge>)}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <Button size="sm" variant="secondary" onClick={() => onAudioIssues?.(track)}>Flag issue</Button>
+        {repairNeeded && <Button size="sm" variant="secondary" onClick={() => onAudioRepair?.([track])}>Repair</Button>}
       </div>
-      <div style={{ marginTop: 8, fontSize: "var(--text-sm)", fontWeight: "var(--weight-semibold)", color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{track.title}</div>
-      <div style={{ fontFamily: "var(--font-typewriter)", fontSize: "var(--text-xs)", color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{track.artist} · {track.qualityLabel || track.format.toUpperCase()}</div>
-      <div style={{ marginTop: 4, fontFamily: "var(--font-typewriter)", fontSize: "var(--text-xs)", color: playable ? "var(--accent-primary)" : "var(--text-secondary)" }}>
-        {!playable ? "Preview unavailable" : selected ? (playing ? "Pause preview" : "Play preview") : "Play preview"}
-      </div>
-    </button>
+    </div>
   );
 }
 
@@ -118,9 +134,12 @@ function PlaylistTree({ tracks }) {
   );
 }
 
-export function LibraryView({ tracks, pattern, avoidOverwrite = true, locked = false, onZip, onCSV, helperConnected = false }) {
-  const done = tracks.filter((t) => t.status === "complete");
+export function LibraryView({ tracks, pattern, avoidOverwrite = true, locked = false, onZip, onCSV, helperConnected = false, onAudioIssues, onAudioRepair, audioIssueFilter = {}, onAudioIssueFilterChange }) {
+  const doneAll = tracks.filter((t) => t.status === "complete");
+  const done = filterByAudioIssues(doneAll, audioIssueFilter);
   const playableTracks = done.filter((track) => track.audioUrl);
+  const bassFlagged = doneAll.filter((track) => hasAudioIssue(track, "bass_crackle"));
+  const leftFlagged = doneAll.filter((track) => hasAudioIssue(track, "left_channel_disturbance"));
   const [selectedId, setSelectedId] = React.useState("");
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [playbackError, setPlaybackError] = React.useState("");
@@ -186,11 +205,26 @@ export function LibraryView({ tracks, pattern, avoidOverwrite = true, locked = f
           <span style={{ fontFamily: "var(--font-display)", fontWeight: "var(--weight-semibold)", fontSize: "var(--text-h3)", letterSpacing: "-0.01em", lineHeight: "var(--leading-tight)" }}>Converted library</span>
           <span style={{ marginLeft: "auto", fontFamily: "var(--font-typewriter)", fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>{done.length} tracks</span>
         </div>
-        {done.length === 0 ? (
+        <div style={{ padding: "10px 18px", borderBottom: "1px solid var(--border-soft)", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", background: "var(--surface-recessed)" }}>
+          <AudioIssueFilters value={audioIssueFilter} onChange={onAudioIssueFilterChange} compact />
+          <span style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Button size="sm" variant="secondary" disabled={locked || !bassFlagged.length} onClick={() => onAudioRepair?.(bassFlagged, "bass-safe-plus")}>
+              Bass Safe Plus {bassFlagged.length || ""}
+            </Button>
+            <Button size="sm" variant="secondary" disabled={locked || !leftFlagged.length} onClick={() => onAudioRepair?.(leftFlagged, "stereo-blend-safe")}>
+              Stereo Blend {leftFlagged.length || ""}
+            </Button>
+          </span>
+        </div>
+        {doneAll.length === 0 ? (
           <div style={{ padding: "48px 18px", textAlign: "center", color: "var(--text-secondary)" }}>
             <Icon name="note" size={30} color="var(--border-strong)" style={{ margin: "0 auto 10px" }} />
             <div>No converted tracks yet.</div>
             <div style={{ fontSize: "var(--text-sm)" }}>Connect the local helper and convert a queue before this library contains audio outputs.</div>
+          </div>
+        ) : done.length === 0 ? (
+          <div style={{ padding: "32px 18px", textAlign: "center", color: "var(--text-secondary)" }}>
+            <div>No tracks match the audio filters.</div>
           </div>
         ) : (
           <div style={{ padding: 18, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(128px, 1fr))", gap: 16 }}>
@@ -202,6 +236,8 @@ export function LibraryView({ tracks, pattern, avoidOverwrite = true, locked = f
                 selected={selectedTrack?.id === t.id}
                 playing={selectedTrack?.id === t.id && isPlaying}
                 onSelect={handleSelect}
+                onAudioIssues={onAudioIssues}
+                onAudioRepair={onAudioRepair}
               />
             ))}
           </div>
@@ -238,7 +274,16 @@ export function LibraryView({ tracks, pattern, avoidOverwrite = true, locked = f
                   <div style={{ fontFamily: "var(--font-typewriter)", fontSize: "var(--text-xs)", color: "var(--text-secondary)", marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {selectedTrack.album} · {selectedTrack.qualityLabel || selectedTrack.format.toUpperCase()}
                   </div>
+                  {audioIssueLabels(selectedTrack).length > 0 && (
+                    <div style={{ display: "flex", gap: 5, marginTop: 6, flexWrap: "wrap" }}>
+                      {audioIssueLabels(selectedTrack).map((label) => <Badge key={label} tone="warning">{label}</Badge>)}
+                    </div>
+                  )}
                 </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Button size="sm" variant="secondary" disabled={locked} onClick={() => onAudioIssues?.(selectedTrack)}>Flag issue</Button>
+                {needsAudioRepair(selectedTrack) && <Button size="sm" variant="secondary" disabled={locked} onClick={() => onAudioRepair?.([selectedTrack])}>Repair</Button>}
               </div>
               {canPreviewSelected ? (
                 <audio

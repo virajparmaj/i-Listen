@@ -5,6 +5,7 @@ import { ProgressBar } from "./ui/ProgressBar.jsx";
 import { Button } from "./ui/Button.jsx";
 import { Icon } from "./ui/Icon.jsx";
 import { ArtworkThumb } from "./ArtworkThumb.jsx";
+import { audioIssueLabels, needsAudioRepair } from "../utils/audioRepair.js";
 
 function Thumb({ track }) {
   return (
@@ -26,7 +27,7 @@ function Thumb({ track }) {
   );
 }
 
-export function QueueRow({ track, last, onEdit, onArt, onDownload, onRetry, onRemove, onCancel, locked = false, selected = false, onToggleSelect }) {
+export function QueueRow({ track, last, onEdit, onArt, onDownload, onRetry, onRemove, onCancel, onReconvert, onAudioIssues, onAudioRepair, locked = false, selected = false, onToggleSelect }) {
   const st = STATUS[track.status];
   const isDone = track.status === "complete";
   const isFail = track.status === "failed";
@@ -35,6 +36,8 @@ export function QueueRow({ track, last, onEdit, onArt, onDownload, onRetry, onRe
   const inFlight = IN_FLIGHT.includes(track.status);
   const canDelete = !locked && !inFlight;
   const iconButtonStyle = { width: 28, padding: 0 };
+  const issueLabels = audioIssueLabels(track);
+  const repairNeeded = needsAudioRepair(track);
 
   return (
     <div className="il-queue-row" style={{
@@ -50,6 +53,7 @@ export function QueueRow({ track, last, onEdit, onArt, onDownload, onRetry, onRe
             {track.title}
           </span>
           {track.warning && <Icon name="warn" size={14} color="var(--status-warning)" />}
+          {issueLabels.map((label) => <Badge key={label} tone="warning">{label}</Badge>)}
         </div>
         <div style={{ fontFamily: "var(--font-typewriter)", fontSize: "var(--text-sm)", color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {track.artist} · {track.qualityLabel || track.format.toUpperCase()} · {track.size} · {track.duration}
@@ -94,6 +98,9 @@ export function QueueRow({ track, last, onEdit, onArt, onDownload, onRetry, onRe
             </label>
             <Button size="sm" variant="ghost" style={iconButtonStyle} disabled={locked} onClick={() => onArt(track)} title="Cover art"><Icon name="art" size={14} /></Button>
             <Button size="sm" variant="ghost" style={iconButtonStyle} disabled={locked} onClick={() => onEdit(track)} title="Edit metadata"><Icon name="prefs" size={14} /></Button>
+            <Button size="sm" variant="secondary" disabled={locked} onClick={() => onAudioIssues?.(track)}>Flag issue</Button>
+            {repairNeeded && <Button size="sm" variant="secondary" disabled={locked} onClick={() => onAudioRepair?.([track])}>Repair</Button>}
+            <Button size="sm" variant="secondary" disabled={locked} onClick={() => onReconvert?.(track)} title="Rebuild from saved source/link">Reconvert</Button>
             <Button size="sm" variant="secondary" disabled={locked} iconLeft={<Icon name="get" size={13} />} onClick={() => onDownload(track)}>Manifest</Button>
             <Button size="sm" variant="ghost" style={iconButtonStyle} disabled={!canDelete} onClick={() => onRemove(track)} title="Delete conversion"><Icon name="trash" size={14} color="var(--text-secondary)" /></Button>
           </>

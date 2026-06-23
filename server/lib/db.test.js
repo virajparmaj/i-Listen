@@ -25,6 +25,9 @@ describe("SQLite job persistence", () => {
     expect(result.created[0].status).toBe("queued");
     expect(result.created[0].playlists).toEqual([]);
     expect(result.created[0].metadataReviewStatus).toBe("pending");
+    expect(result.created[0].audioIssueTags).toEqual([]);
+    expect(result.created[0].audioRepairStatus).toBe("");
+    expect(result.created[0].audioAnalysis).toEqual({});
 
     const updated = updateJob(db, result.created[0].id, {
       status: "complete",
@@ -57,6 +60,14 @@ describe("pipeline status + migration", () => {
       aiMetadataConfidence: 0.86,
       aiMetadataSources: ["ollama", "musicbrainz"],
       aiMetadataError: "",
+      audioIssueTags: ["bass_crackle", "left_channel_disturbance"],
+      audioRepairPreset: "stereo-blend-safe",
+      audioRepairStatus: "needs_repair",
+      audioRepairNotes: "Left side gets harsh on iPod earbuds.",
+      audioAnalysis: {
+        summary: ["left channel hotter/noisier"],
+        flags: { leftHotterOrNoisier: true },
+      },
     });
     expect(updated.disc).toBe("1");
     expect(updated.exportStatus).toBe("validated");
@@ -67,6 +78,14 @@ describe("pipeline status + migration", () => {
     expect(updated.aiMetadataModel).toBe("llama3:latest");
     expect(updated.aiMetadataConfidence).toBe(0.86);
     expect(updated.aiMetadataSources).toEqual(["ollama", "musicbrainz"]);
+    expect(updated.audioIssueTags).toEqual(["bass_crackle", "left_channel_disturbance"]);
+    expect(updated.audioRepairPreset).toBe("stereo-blend-safe");
+    expect(updated.audioRepairStatus).toBe("needs_repair");
+    expect(updated.audioRepairNotes).toBe("Left side gets harsh on iPod earbuds.");
+    expect(updated.audioAnalysis).toMatchObject({
+      summary: ["left channel hotter/noisier"],
+      flags: { leftHotterOrNoisier: true },
+    });
 
     const reset = updateJob(db, job.id, { readyForFinderSync: 0 });
     expect(reset.readyForFinderSync).toBe(0);

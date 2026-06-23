@@ -63,6 +63,11 @@ describe("job mapping", () => {
       aiMetadataSources: ["ollama", "musicbrainz"],
       aiMetadataError: "",
       aiMetadataUpdatedAt: "2026-06-06T12:01:00.000Z",
+      audioIssueTags: ["left_channel_disturbance"],
+      audioRepairPreset: "stereo-blend-safe",
+      audioRepairStatus: "needs_repair",
+      audioRepairNotes: "Left ear gets noisy.",
+      audioAnalysis: { summary: ["left channel hotter/noisier"] },
       updatedAt: "2026-06-06T12:00:00.000Z",
       createdAt: "2026-06-06T11:00:00.000Z",
     });
@@ -75,6 +80,11 @@ describe("job mapping", () => {
     expect(track.aiMetadataModel).toBe("llama3:latest");
     expect(track.aiMetadataConfidence).toBe(0.91);
     expect(track.aiMetadataSources).toEqual(["ollama", "musicbrainz"]);
+    expect(track.audioIssueTags).toEqual(["left_channel_disturbance"]);
+    expect(track.audioRepairPreset).toBe("stereo-blend-safe");
+    expect(track.audioRepairStatus).toBe("needs_repair");
+    expect(track.audioRepairNotes).toBe("Left ear gets noisy.");
+    expect(track.audioAnalysis.summary).toEqual(["left channel hotter/noisier"]);
   });
 
   it("keeps placeholder artwork and no preview URL when helper assets do not exist", () => {
@@ -132,5 +142,61 @@ describe("job mapping", () => {
     });
 
     expect(track.coverArt).toContain("/jobs/job-3/cover");
+  });
+
+  it("maps bass-safe reconverted jobs back to the Bass Safe preset", () => {
+    const track = mapJob({
+      id: "job-4",
+      url: "https://youtube.com/watch?v=demo-4",
+      outputOption: "ipod-safe-aac",
+      title: "Bass Song",
+      artist: "Artist",
+      album: "Album",
+      albumArtist: "Artist",
+      playlists: [],
+      durationSec: 120,
+      sizeBytes: 4_000_000,
+      progress: 100,
+      status: "complete",
+      outputPath: "/tmp/song.m4a",
+      coverPath: "",
+      customCoverPath: "",
+      updatedAt: "",
+      createdAt: "",
+    });
+
+    expect(track.preset).toBe("ipodSafe");
+    expect(track.qualityLabel).toBe("Bass Safe AAC");
+  });
+
+  it("maps audio repaired jobs to repair output metadata", () => {
+    const track = mapJob({
+      id: "job-5",
+      url: "https://youtube.com/watch?v=demo-5",
+      outputOption: "bass-safe-plus",
+      selectedOutput: "Bass Safe Plus AAC",
+      title: "Repair Song",
+      artist: "Artist",
+      album: "Album",
+      albumArtist: "Artist",
+      playlists: [],
+      durationSec: 120,
+      sizeBytes: 4_000_000,
+      progress: 100,
+      status: "complete",
+      outputPath: "/tmp/song.m4a",
+      coverPath: "",
+      customCoverPath: "",
+      audioIssueTags: [],
+      audioRepairPreset: "bass-safe-plus",
+      audioRepairStatus: "repaired",
+      updatedAt: "",
+      createdAt: "",
+    });
+
+    expect(track.outputOption).toBe("bass-safe-plus");
+    expect(track.format).toBe("aac");
+    expect(track.qualityLabel).toBe("Bass Safe Plus AAC");
+    expect(track.audioRepairStatus).toBe("repaired");
   });
 });

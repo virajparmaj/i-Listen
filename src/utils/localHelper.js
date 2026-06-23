@@ -101,6 +101,41 @@ export async function aiApproveJob(id) {
   return request(`/jobs/${id}/ai-approve`, { method: "POST", body: "{}" });
 }
 
+export async function updateAudioIssues(id, { audioIssueTags = [], cleared = false, audioRepairNotes = "" } = {}) {
+  return request(`/jobs/${id}/audio-issues`, {
+    method: "PATCH",
+    body: JSON.stringify({ audioIssueTags, cleared, audioRepairNotes }),
+  });
+}
+
+export async function repairAudioJob(id, { preset = "", analyzeOnly = false, replaceExisting = true } = {}) {
+  return request(`/jobs/${id}/audio-repair`, {
+    method: "POST",
+    body: JSON.stringify({ preset, analyzeOnly, replaceExisting }),
+  });
+}
+
+export async function repairAudioJobs(ids, { preset = "", analyzeOnly = false, replaceExisting = true } = {}) {
+  return request("/jobs/audio-repair", {
+    method: "POST",
+    body: JSON.stringify({ ids, preset, analyzeOnly, replaceExisting }),
+  });
+}
+
+export async function reconvertJob(id, { outputOption = "ipod-safe-aac", replaceExisting = true } = {}) {
+  return request(`/jobs/${id}/reconvert`, {
+    method: "POST",
+    body: JSON.stringify({ outputOption, replaceExisting }),
+  });
+}
+
+export async function reconvertJobs(ids, { outputOption = "ipod-safe-aac", replaceExisting = true } = {}) {
+  return request("/jobs/reconvert", {
+    method: "POST",
+    body: JSON.stringify({ ids, outputOption, replaceExisting }),
+  });
+}
+
 export async function startJob(id) {
   return request(`/jobs/${id}/start`, { method: "POST", body: "{}" });
 }
