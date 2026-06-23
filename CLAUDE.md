@@ -902,6 +902,27 @@ Verification:
 
 There are currently 0 approved tracks pending Apple Music handoff. Apple Music `iPod Sync` has been rebuilt to match iListen's 145 clean approved tracks; the next user-facing step is to sync `iPod Sync` in Finder to apply the current playlist to the physical iPod. Do not just unplug the iPod from the Apple Music playlist view. After Finder finishes syncing, eject the iPod.
 
+2026-06-20 sync-count verification after the user reported the iPod shows only 126 songs:
+
+```text
+iListen SQLite: 145 jobs, all complete/approved/imported/playlist-added/ready_for_finder_sync.
+Apple Music `iPod Sync`: 145 tracks, 145 unique title/artist/album keys, 0 unchecked tracks, total size about 6.7 GiB.
+Local exports: 145 DB-backed `.m4a` files; they are ALAC, not MP3/AAC. A raw export-folder count may be 147 because of a few stale/orphan files, but Apple Music and DB both agree on 145 clean tracks.
+iPod was not connected at verification time (`/Volumes/iPod`, `diskutil`, and USB scan showed no device), so the device database could not be read directly.
+If the physical iPod still shows 126 songs, the gap is after the Apple Music handoff: run Finder sync for `Viraj Parmar's iPod` -> Music -> selected playlists -> `iPod Sync` -> Apply/Sync, then eject.
+```
+
+Later connected-device verification on 2026-06-20:
+
+```text
+iPod mounted as `/Volumes/iPod` on `/dev/disk4s2` (159.8 GB HFS+, about 153 GB free).
+Actual on-device hidden music folder `/Volumes/iPod/iPod_Control/Music` contains 126 `.m4a` files, all ALAC, about 5.9 GiB.
+Apple Music `iPod Sync` still contains 145 tracks, about 6.7 GiB.
+Tag comparison showed 23 expected iListen tracks missing from the iPod and 4 stale/unmatched old rows still present, netting the observed 126-vs-145 gap.
+Stale rows on the iPod include: `Boyfriend | Justin Bieber | Pop Party 10`, `The Feeling ft. Halsey | Justin Bieber | 2018 - Singles`, `Starboy ft. Daft Punk ft. Daft Punk | The Weeknd | 2016 - Singles`, and `Cigarettes After Sex | Cry | 2019 - Singles`.
+Conclusion: the physical iPod has stale pre-cleanup sync state. Do not rebuild Apple Music again; use Finder to sync selected playlist `iPod Sync` to the device, then recheck `/Volumes/iPod/iPod_Control/Music` for 145 files.
+```
+
 To hear songs on the iPod, the user should:
 
 1. Open Finder.
@@ -913,6 +934,125 @@ To hear songs on the iPod, the user should:
 7. Eject the iPod and play `Music > Playlists > iPod Sync`.
 
 If Finder asks to `Erase and Sync`, pause and confirm with the user before proceeding because the iPod may be linked to another library.
+
+2026-06-21 bass-crackle workaround:
+
+```text
+User reported bass-heavy beats crackling on the iPod while the YouTube video itself sounds fine.
+Diagnosis: "Best Available" is the as-source path (copy YouTube AAC when iPod-compatible, otherwise preserve as ALAC), so it does not add clipping but also will not tame hot bass peaks. The likely playback-side causes are iPod EQ/headphone amp/headphone overload or source clipping already present in the downloaded stream.
+Code added a new visible `Bass Safe` preset / `ipod-safe-aac` output option. It forces AAC-LC 256 kbps M4A and applies FFmpeg `-af volume=-4dB,alimiter=limit=0.85:level=false` before encode. This gives old iPod playback chains headroom and catches peaks, but cannot repair distortion already baked into the source.
+UI now shows three compact import presets: Best Available, Bass Safe, and iPod MP3. Advanced output select also includes Bass-safe AAC-LC 256 kbps M4A.
+README quality note now documents Bass Safe for iPod-only bass crackle.
+Verification: `npm test` -> 22 files / 138 pass; `npm run lint` -> passed; `npm run build` -> passed (JS 262.59 kB / gzip 76.56 kB). Started Vite at http://127.0.0.1:5173 and helper at http://127.0.0.1:4317. Helper `/health` had tools ready; paired/opened default project with 145 jobs loaded. An isolated temp helper on port 4318 created a queued test job with `outputOption: ipod-safe-aac`; no live library rows were added. Direct FFmpeg synthetic encode through the same filter produced a valid 2-second AAC M4A.
+No Apple Music handoff, Finder sync, iPod database write, or live conversion was intentionally run during this change.
+Recommended user test: turn iPod EQ Off, reconvert one affected bass-heavy track with Bass Safe, approve/handoff/sync it, then compare on the iPod. If it still crackles, the distortion is likely already in the source or the headphone/output chain.
+```
+
+2026-06-21 Reconvert / Enhance workflow implementation:
+
+```text
+Added a proper reconvert workflow for existing completed jobs, so users no longer need to paste a YouTube URL again to rebuild a track as Bass Safe or another output.
+Backend:
+- `server/lib/converter.js` exports `reconvertExistingJob`, which prefers an existing `sourcePath`, redownloads from saved `job.url` only when the source file is gone, never reruns YouTube metadata inference, and retags the rebuilt file with the cleaned job metadata/artwork.
+- `POST /jobs/:id/reconvert` and `POST /jobs/reconvert` rebuild one or more completed jobs. Successful reconverts preserve approved metadata/review state, update output fields, and reset Apple Music/Finder handoff fields to pending/0 with `musicPersistentId` cleared.
+- Same-extension reconverts replace the current export atomically; extension-changing reconverts archive the old export under `exports/archive/reconverted/` and update `outputPath`.
+Frontend:
+- Completed Queue and Sync rows now expose `Reconvert`.
+- Sync rows are selectable and the Sync header exposes `Reconvert selected as Bass Safe`.
+- A compact modal lets users choose Best Available, Bass Safe, iPod MP3, or Apple Native / AAC 256, with Bass Safe as the default repair path.
+Verification:
+- `npm test` -> 22 files / 145 tests passed.
+- `npm run lint` -> passed.
+- `npm run build` -> passed (JS 267.50 kB / gzip 77.72 kB).
+- Started helper at http://127.0.0.1:4317 and Vite at http://127.0.0.1:5173; helper `/health` reported tools ready and 145 live jobs loaded. AI metadata health was false for qwen:1.8b, unrelated to reconvert.
+- Ran an isolated temp-project API smoke test with real FFmpeg. It reconverted a completed approved row from `sourcePath` to `ipod-safe-aac`, preserved approved metadata, and reset Apple Music/Finder state to pending without touching the live DB.
+No Apple Music handoff, Finder sync, iPod database write, or live library reconvert was intentionally run during this implementation.
+Next user-facing step: choose an affected completed track, click Reconvert, keep Bass Safe selected, then use Sync to add the corrected file to Apple Music and sync `iPod Sync` in Finder.
+```
+
+2026-06-21 Sync row declutter:
+
+```text
+Removed the per-track Sync row badges for `Tags ✓`, `Art ✓`, and `Ready for Finder sync` because the completed approved list was visually crowded after adding Reconvert controls. Rows still show artwork, checkbox, title/artist/album, AI confidence when available, and Edit/Reconvert/Delete actions. The aggregate header counts still show approved/converted totals.
+Verification: `npm run lint` -> passed; `npm run build` -> passed (JS 266.40 kB / gzip 77.47 kB).
+No Apple Music handoff, Finder sync, iPod database write, live conversion, or live reconvert was run.
+```
+
+2026-06-21 Sync batch selection follow-up:
+
+```text
+Added a `Select all` / `Clear selection` control to the Sync Tracks header for batch Bass Safe rebuilds. The batch action now says `Rebuild N as Bass Safe` after selection and `Pick tracks` before selection. Removed the extra `145 converted`-style badge from the Tracks header to keep the area less noisy.
+Verification: `npm run lint` -> passed; `npm run build` -> passed (JS 266.54 kB / gzip 77.49 kB).
+No Apple Music handoff, Finder sync, iPod database write, live conversion, or live reconvert was run.
+```
+
+2026-06-21 non-blocking reconvert UI follow-up:
+
+```text
+Changed reconvert endpoints to return immediately with `202 Accepted` and process accepted jobs sequentially in the background, instead of keeping the browser request/modal blocked for the whole batch. Accepted jobs are marked `conversionStatus: reconvert_queued`; the active job switches to `converting`, and each successful rebuild returns to `complete`.
+The Reconvert modal now closes immediately after starting. A small top-right iTunes-style floating panel shows rebuild progress (`done/total`), a progress bar, the active track or waiting count, and failure count if any. It auto-dismisses shortly after completion.
+This code change did not restart the running helper, so any reconvert already in progress under the previous helper process was intentionally left undisturbed. Restart the helper after the current batch finishes to pick up the non-blocking backend route.
+Verification: `npm test` -> 22 files / 145 tests passed; `npm run lint` -> passed; `npm run build` -> passed (JS 269.10 kB / gzip 78.20 kB).
+No Apple Music handoff, Finder sync, iPod database write, live conversion, or live reconvert was run by this follow-up.
+```
+
+2026-06-21 Apple Music `iPod Sync` duplicate cleanup after live Bass Safe reconvert:
+
+```text
+User reported duplicate songs after the Bass Safe reconvert/handoff. Before cleanup, Apple Music `iPod Sync` had 150 rows, 5 duplicate title/artist/album groups, and 0 rows pointing directly at `/Users/veerr_89/Music/iListen Project/exports/` because Music had copied/imported tracks into its own library.
+Backups created:
+- DB: `/Users/veerr_89/Music/iListen Project/backups/ilisten-before-ipod-sync-dedupe-20260621-113845.sqlite`
+- Apple Music before playlist dump: `/Users/veerr_89/Music/iListen Project/backups/ipod-sync-before-dedupe-20260621-113859.tsv`
+- First rebuild dump: `/Users/veerr_89/Music/iListen Project/backups/ipod-sync-after-first-rebuild-20260621-114039.tsv`
+- Final dump: `/Users/veerr_89/Music/iListen Project/backups/ipod-sync-after-dedupe-20260621-114132.tsv`
+Live Apple Music change: deleted/recreated only the user playlist `iPod Sync`, then rebuilt it from the current 145 approved iListen Bass Safe exports. The first pass added 144, then `ZAYN — Fingers` was added manually via the same Apple Music helper path.
+Final verified state: Apple Music `iPod Sync` has 145 rows, 0 duplicate title/artist/album groups, and every approved iListen DB row is represented. The DB was updated to mark all 145 as `appleMusicImportStatus: imported`, `appleMusicPlaylistStatus: added`, `readyForFinderSync: 1`, `syncedOrNeedsManualSync: needs_manual`, with fresh persistent IDs from the cleaned playlist.
+No main Apple Music library tracks were intentionally deleted, and the physical iPod/Finder sync was not touched. Next user-facing step is Finder -> iPod -> Music -> selected playlists -> `iPod Sync` -> Apply/Sync -> eject.
+```
+
+2026-06-21 Apple Music `iListen` folder reset for Finder 197-track sync count:
+
+```text
+User saw Finder report 197 tracks selected for sync even though `iPod Sync` itself was clean. Rechecked state: iListen DB had 145 approved Bass Safe rows, all marked added/ready; Apple Music `iPod Sync` had 145 tracks and 0 duplicate rows. Extra standalone playlists such as `Back from School` (169), `Back to College` (66), `Analogous` (51), and `Always Been You` (33) still existed in Music and can inflate Finder's sync count if selected.
+Backups created:
+- DB: `/Users/veerr_89/Music/iListen Project/backups/ilisten-before-ilisten-folder-reset-20260621-115359.sqlite`
+- Apple Music playlist inventory: `/Users/veerr_89/Music/iListen Project/backups/apple-music-playlists-before-ilisten-folder-reset-20260621-115453.tsv`
+Live Apple Music change: deleted/recreated the `iListen` folder playlist and rebuilt `iPod Sync` from the 145 approved iListen exports. Final verification: folder exists, `iPod Sync` exists with 145 rows, duplicate scan returns 0 duplicate rows, DB still reports 145 approved Bass Safe / 145 added / 145 ready.
+No physical iPod files/database or Finder sync were touched. If Finder still shows more than 145 tracks, the user should uncheck every separate playlist/artist/album and leave only playlist `iPod Sync` selected; close/reopen Finder or uncheck/recheck Music sync if Finder caches the old selection.
+```
+
+2026-06-21 Audio Repair workflow implementation:
+
+```text
+Added per-track audio issue and repair state for old-iPod playback problems after Bass Safe reconvert:
+- `audioIssueTags` supports `bass_crackle` and `left_channel_disturbance`.
+- `audioRepairPreset`, `audioRepairStatus`, `audioRepairNotes`, and `audioAnalysis` persist repair choice/status and FFmpeg astats summaries.
+- `PATCH /jobs/:id/audio-issues` flags/dedupes/clears issue tags.
+- `POST /jobs/:id/audio-repair` and `POST /jobs/audio-repair` support analyze-only and background sequential repair batches.
+
+Repair reuses the existing reconvert path: prefer `sourcePath`, fall back to saved `job.url`, never rerun YouTube metadata inference, preserve cleaned metadata/artwork/playlists, and reset Apple Music/Finder handoff fields only after successful repair. Failed repair restores the old output/handoff state and marks `audioRepairStatus: failed`.
+
+Added repair presets:
+- `bass-safe-plus`: AAC 256 M4A with `loudnorm=I=-18:TP=-3:LRA=11,alimiter=limit=0.75:attack=8:release=80:level=false`
+- `left-channel-soften`: mild left-channel blend
+- `stereo-blend-safe`: stronger L/R blend for channel-specific disturbance
+- `mono-rescue`: last-resort dual-mono blend
+- `right-channel-rescue`: last-resort right-channel copy
+
+Frontend:
+- Queue, Sync, and Library rows/tiles now expose `Flag issue` and issue-aware `Repair` controls.
+- Shared filters: Show Bass crackle, Show Left channel issue, Show Needs audio repair.
+- Audio Issues modal has Bass crackle, Left ear issue, Analyze, Repair preset, Reconvert, and Cleared / fixed.
+- Batch actions repair flagged bass crackle as Bass Safe Plus, left-ear issues as Stereo Blend Safe, and Sync can analyze selected tracks.
+
+Verification:
+- `npm test` -> 23 files / 153 tests passed.
+- `npm run lint` -> passed.
+- `npm run build` -> passed (JS 283.34 kB / gzip 81.21 kB).
+
+No Apple Music handoff, Finder sync, iPod database write, live conversion, or live repair/reconvert was intentionally run during this implementation.
+Next user-facing step: flag one affected completed track, run Analyze, choose Bass Safe Plus or Stereo Blend Safe, Reconvert, then hand off/sync the repaired track through the normal Apple Music/Finder flow.
+```
 
 ## Maintenance Rule For Future Agents
 
