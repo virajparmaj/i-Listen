@@ -1,7 +1,7 @@
 import React from "react";
 import { PRESETS } from "../data/mockData.js";
 
-const PRIMARY_PRESETS = ["best", "mp3"];
+const PRIMARY_PRESETS = ["best", "ipodSafe", "mp3"];
 
 /** Import-level quality choice. Advanced output and filenames live in Settings. */
 export function OutputControls({ preset, setPreset, disabled = false, compact = false }) {

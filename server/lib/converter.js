@@ -1,12 +1,43 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, rm, stat, writeFile } from "node:fs/promises";
-import { basename, extname, join } from "node:path";
+import { copyFile, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import { addLog, getJob, listJobs, updateJob } from "./db.js";
 import { customPlaylists, inferTrackMetadata } from "./metadata.js";
 import { ensureParent, fileExists, relativePlaylistPath, sanitizePathSegment } from "./paths.js";
 
 const COMPLETE_CODECS = new Set(["aac", "alac", "mp3"]);
+const IPOD_SAFE_FILTER = "volume=-4dB,alimiter=limit=0.85:level=false";
+
+export const AUDIO_REPAIR_PRESETS = {
+  "bass-safe-plus": {
+    label: "Bass Safe Plus AAC",
+    warning: "Bass Safe Plus adds more headroom.",
+    filter: "loudnorm=I=-18:TP=-3:LRA=11,alimiter=limit=0.75:attack=8:release=80:level=false",
+  },
+  "left-channel-soften": {
+    label: "Left Channel Soften AAC",
+    warning: "Left Channel Soften reduces mild left-only artifacts.",
+    filter: "pan=stereo|FL=0.85*FL+0.15*FR|FR=FR,alimiter=limit=0.85:level=false",
+  },
+  "stereo-blend-safe": {
+    label: "Stereo Blend Safe AAC",
+    warning: "Stereo Blend reduces left-only artifacts.",
+    filter: "pan=stereo|FL=0.70*FL+0.30*FR|FR=0.30*FL+0.70*FR,alimiter=limit=0.85:level=false",
+  },
+  "mono-rescue": {
+    label: "Mono Rescue AAC",
+    warning: "Mono Rescue is last resort.",
+    filter: "pan=stereo|FL<FL+FR|FR<FL+FR,alimiter=limit=0.85:level=false",
+  },
+  "right-channel-rescue": {
+    label: "Right Channel Rescue AAC",
+    warning: "Right Channel Rescue uses the right channel for both ears.",
+    filter: "pan=stereo|FL=FR|FR=FR,alimiter=limit=0.85:level=false",
+  },
+};
+
+export const AUDIO_REPAIR_OUTPUT_OPTIONS = new Set(Object.keys(AUDIO_REPAIR_PRESETS));
 
 export function runProcess(command, args, options = {}) {
   const { cwd, signal, onStdout, onStderr } = options;
@@ -57,8 +88,25 @@ function outputExtension(plan) {
   return "m4a";
 }
 
+export function warningForOutputOption(outputOption) {
+  if (AUDIO_REPAIR_PRESETS[outputOption]) {
+    return AUDIO_REPAIR_PRESETS[outputOption].warning;
+  }
+  if (outputOption === "ipod-safe-aac") {
+    return "Bass-safe export leaves headroom and limits peaks for older iPods; it cannot repair distortion already in the source.";
+  }
+  if (outputOption === "best-youtube") {
+    return "Best available from YouTube; not original studio/master quality.";
+  }
+  return "";
+}
+
 function outputLabel(plan) {
+  if (plan.repairPreset && AUDIO_REPAIR_PRESETS[plan.repairPreset]) {
+    return AUDIO_REPAIR_PRESETS[plan.repairPreset].label;
+  }
   if (plan.mode === "copy-aac") return "AAC copied from YouTube";
+  if (plan.mode === "ipod-safe-aac") return "Bass-safe AAC for iPod";
   if (plan.codec === "alac") return "ALAC from YouTube";
   if (plan.codec === "aac") return "AAC 256 from YouTube";
   if (plan.codec === "mp3") return "MP3 V0 from YouTube";
@@ -72,7 +120,22 @@ export function chooseOutputPlan(job, probe) {
   const formatName = String(probe.format?.format_name || "").toLowerCase();
   const isMp4Family = /mp4|mov|m4a|3gp/.test(formatName);
 
+  if (AUDIO_REPAIR_PRESETS[requested]) {
+    return {
+      mode: requested,
+      repairPreset: requested,
+      codec: "aac",
+      args: ["-af", AUDIO_REPAIR_PRESETS[requested].filter, "-c:a", "aac", "-b:a", "256k"],
+    };
+  }
   if (requested === "mp3-v0") return { mode: "transcode", codec: "mp3", args: ["-c:a", "libmp3lame", "-q:a", "0"] };
+  if (requested === "ipod-safe-aac") {
+    return {
+      mode: "ipod-safe-aac",
+      codec: "aac",
+      args: ["-af", IPOD_SAFE_FILTER, "-c:a", "aac", "-b:a", "256k"],
+    };
+  }
   if (requested === "aac-256") return { mode: "transcode", codec: "aac", args: ["-c:a", "aac", "-b:a", "256k"] };
   if (requested === "alac") return { mode: "transcode", codec: "alac", args: ["-c:a", "alac"] };
   if (codec === "aac" && isMp4Family) return { mode: "copy-aac", codec: "aac", args: ["-c:a", "copy"] };
@@ -93,6 +156,40 @@ function uniqueOutputPath(project, job, plan) {
     i += 1;
   }
   return ensureParent(path);
+}
+
+function reconvertTempPath(outputPath, plan) {
+  const ext = `.${outputExtension(plan)}`;
+  return ensureParent(`${outputPath}.reconvert-${Date.now()}${ext}`);
+}
+
+function timestampForPath() {
+  return new Date().toISOString().replace(/[:.]/g, "-");
+}
+
+function uniqueArchivePath(project, oldOutputPath) {
+  const ext = extname(oldOutputPath) || ".m4a";
+  const stem = sanitizePathSegment(basename(oldOutputPath, ext), "reconverted-export");
+  const dir = join(project.exportsDir, "archive", "reconverted");
+  let path = join(dir, `${stem}-${timestampForPath()}${ext}`);
+  let i = 2;
+  while (fileExists(path)) {
+    path = join(dir, `${stem}-${timestampForPath()}-${i}${ext}`);
+    i += 1;
+  }
+  return ensureParent(path);
+}
+
+async function moveOrCopy(sourcePath, targetPath) {
+  if (resolve(sourcePath) === resolve(targetPath)) return;
+  await mkdir(dirname(targetPath), { recursive: true });
+  try {
+    await rename(sourcePath, targetPath);
+  } catch (error) {
+    if (error?.code !== "EXDEV") throw error;
+    await copyFile(sourcePath, targetPath);
+    await rm(sourcePath, { force: true });
+  }
 }
 
 function buildFfmpegArgs({ inputPath, coverPath, outputPath, job, plan }) {
@@ -188,6 +285,128 @@ function firstExistingPath(text) {
 
 function logSnippet(text) {
   return text.trim().split(/\n+/).slice(-4).join(" ").slice(0, 500);
+}
+
+async function downloadSourceForJob({ tools, project, job, signal, run = runProcess }) {
+  if (!job.url) {
+    throw new Error("Original source file is missing and this job has no saved YouTube URL.");
+  }
+
+  const outputTemplate = join(project.stagingDir, `${job.id}-reconvert.%(ext)s`);
+  const { stdout: downloadText, stderr: downloadErr } = await run(tools.ytdlp.path, [
+    "-f", "ba/b",
+    "--no-playlist",
+    "--no-progress",
+    "--force-overwrites",
+    "--print", "after_move:filepath",
+    "-o", outputTemplate,
+    job.url,
+  ], { signal });
+
+  const sourcePath = firstExistingPath(downloadText) || firstExistingPath(downloadErr);
+  if (!sourcePath) throw new Error("yt-dlp finished without reporting a downloaded audio file.");
+  return sourcePath;
+}
+
+function pickReconvertSource(job) {
+  if (job.sourcePath && existsSync(job.sourcePath)) {
+    return { sourcePath: job.sourcePath, usedSavedSource: true };
+  }
+  return { sourcePath: "", usedSavedSource: false };
+}
+
+function reconvertOutputPath(project, job, plan, replaceExisting) {
+  const oldOutputPath = job.outputPath || "";
+  const oldExt = extname(oldOutputPath).replace(".", "").toLowerCase();
+  const nextExt = outputExtension(plan);
+  if (replaceExisting && oldOutputPath && oldExt === nextExt) {
+    return { outputPath: oldOutputPath, tempPath: reconvertTempPath(oldOutputPath, plan), archiveOld: false };
+  }
+  const outputPath = uniqueOutputPath(project, job, plan);
+  return { outputPath, tempPath: outputPath, archiveOld: Boolean(replaceExisting && oldOutputPath && oldExt && oldExt !== nextExt) };
+}
+
+/**
+ * Rebuild an existing library job from its saved source file, or from its saved
+ * YouTube URL when the original source is gone. This intentionally does not
+ * run YouTube metadata inference: the caller's cleaned job metadata is used
+ * for the new file tags and artwork.
+ */
+export async function reconvertExistingJob({
+  project,
+  tools,
+  job,
+  outputOption = job?.outputOption || "best-youtube",
+  replaceExisting = true,
+  signal,
+  run = runProcess,
+  probe = probeMedia,
+  onLog = null,
+} = {}) {
+  if (!project || !tools || !job) throw new Error("Cannot reconvert: missing project, tools, or job.");
+
+  let { sourcePath, usedSavedSource } = pickReconvertSource(job);
+  if (!sourcePath) {
+    sourcePath = await downloadSourceForJob({ tools, project, job, signal, run });
+    usedSavedSource = false;
+  }
+
+  const reconvertJob = { ...job, outputOption };
+  const coverPath = reconvertJob.customCoverPath && existsSync(reconvertJob.customCoverPath)
+    ? reconvertJob.customCoverPath
+    : reconvertJob.coverPath && existsSync(reconvertJob.coverPath)
+      ? reconvertJob.coverPath
+      : "";
+
+  const sourceProbe = await probe(tools.ffprobe.path, sourcePath);
+  const audio = sourceProbe.streams.find((stream) => stream.codec_type === "audio") || {};
+  const plan = chooseOutputPlan(reconvertJob, sourceProbe);
+  const { outputPath, tempPath, archiveOld } = reconvertOutputPath(project, reconvertJob, plan, replaceExisting);
+  const ffmpegArgs = buildFfmpegArgs({ inputPath: sourcePath, coverPath, outputPath: tempPath, job: reconvertJob, plan });
+
+  try {
+    await run(tools.ffmpeg.path, ffmpegArgs, {
+      signal,
+      onStderr: (text) => {
+        const snippet = logSnippet(text);
+        if (snippet) onLog?.(snippet, null, "FFmpeg:");
+      },
+    });
+
+    const outputProbe = await probe(tools.ffprobe.path, tempPath);
+    const outputAudio = outputProbe.streams.find((stream) => stream.codec_type === "audio") || {};
+    const validation = validateExport({ outputPath: tempPath, outputProbe, outputAudio, coverPath, job: reconvertJob });
+    if (!validation.ok) throw new Error(validation.error);
+
+    const outputStats = await stat(tempPath);
+    let archivedOutputPath = "";
+    if (tempPath !== outputPath) {
+      await rename(tempPath, outputPath);
+    } else if (archiveOld && job.outputPath && existsSync(job.outputPath)) {
+      archivedOutputPath = uniqueArchivePath(project, job.outputPath);
+      await moveOrCopy(job.outputPath, archivedOutputPath);
+    }
+
+    return {
+      sourcePath,
+      usedSavedSource,
+      outputPath,
+      archivedOutputPath,
+      sourceCodec: audio.codec_name || "",
+      sourceContainer: sourceProbe.format?.format_name || "",
+      selectedOutput: outputLabel(plan),
+      durationSec: validation.durationSec,
+      sizeBytes: outputStats.size,
+      metadataStatus: validation.metadataStatus,
+      artworkStatus: validation.artworkStatus,
+      warning: warningForOutputOption(outputOption),
+    };
+  } catch (error) {
+    if (tempPath && resolve(tempPath) !== resolve(job.outputPath || "")) {
+      await rm(tempPath, { force: true }).catch(() => {});
+    }
+    throw error;
+  }
 }
 
 export class JobRunner {
@@ -356,7 +575,7 @@ export class JobRunner {
       appleMusicPlaylistStatus: "pending",
       error: "",
       lastError: "",
-      warning: job.outputOption === "best-youtube" ? "Best available from YouTube; not original studio/master quality." : "",
+      warning: warningForOutputOption(job.outputOption),
     });
     this.log(`${relativePlaylistPath(outputPath)} ready for Apple Music import.`, "ok", "Complete:");
   }
