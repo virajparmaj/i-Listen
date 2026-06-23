@@ -12,14 +12,14 @@ The browser UI can be hosted, but conversion runs on your Mac through `http://12
 - Detect `yt-dlp`, `ffmpeg`, and `ffprobe`.
 - Download the best available YouTube audio with `yt-dlp`.
 - Copy iPod-compatible AAC when possible; otherwise convert to ALAC `.m4a` by default to avoid another lossy encode.
-- Keep MP3 V0 and AAC 256 as advanced output options.
+- Keep Bass Safe AAC, MP3 V0, and AAC 256 as alternate output options.
 - Embed metadata and YouTube thumbnail artwork with FFmpeg.
 - Validate converted files with `ffprobe`.
 - Keep converted tracks in metadata review until title, artist, album, artwork, and playlist assignments are approved.
 - Move approved tracks into a clean `Music Library/{Artist}/{Album}/{Track # - Title}.m4a` structure and retag files before handoff.
 - Add approved tracks to Apple Music's `iPod Sync` playlist for Finder/iPod sync.
 
-Quality note: YouTube-only sources are already compressed. iListen preserves the best available source path it can, but it cannot restore original studio/master quality.
+Quality note: YouTube-only sources are already compressed. iListen preserves the best available source path it can, but it cannot restore original studio/master quality. If bass-heavy tracks crackle only on the iPod, try the Bass Safe preset; it transcodes to AAC 256 with extra headroom and a limiter so old iPod playback chains are less likely to clip.
 
 ## Run Locally
 
