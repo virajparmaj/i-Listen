@@ -446,7 +446,11 @@ describe("reconvert endpoints", () => {
       appleMusicPlaylistStatus: "pending",
       readyForFinderSync: 0,
       syncState: "",
-      musicPersistentId: "",
+      // The Music identity survives a reconvert — it is the same track, only the
+      // file behind it changed. Clearing the tag version is what makes the next
+      // handoff refresh it in place instead of adding a duplicate.
+      musicPersistentId: "ABC123",
+      musicTagVersion: "",
       exportStatus: "validated",
     });
   });
@@ -704,7 +708,8 @@ describe("audio repair endpoints", () => {
       appleMusicPlaylistStatus: "pending",
       readyForFinderSync: 0,
       syncState: "",
-      musicPersistentId: "",
+      musicPersistentId: "ABC123",
+      musicTagVersion: "",
     });
   });
 

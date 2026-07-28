@@ -13,6 +13,7 @@ import { searchTracks } from "./lib/youtubeSearch.js";
 import { isYoutubeUrl } from "./lib/youtube.js";
 import { retagExport } from "./lib/retag.js";
 import { cleanupStaleIlistenPlaylists, classifyOsascriptError, handoffToAppleMusic, ILISTEN_FOLDER, MASTER_PLAYLIST } from "./lib/appleMusic.js";
+import { identityPatch } from "./lib/musicIndex.js";
 import { detectIpods, verifyIpodVolume } from "./lib/ipod.js";
 import { appendFileLog } from "./lib/filelog.js";
 import { organizeExport } from "./lib/organize.js";
@@ -440,7 +441,9 @@ async function runAiApprove(state, job) {
       appleMusicPlaylistStatus: "pending",
       readyForFinderSync: 0,
       syncState: "",
-      musicPersistentId: "",
+      // Keep the Music identity: it is still the same track, only its tags went
+      // stale. Clearing the tag version is what routes it to refresh-not-add.
+      musicTagVersion: "",
       lastError: "",
       aiMetadataStatus: "approved",
       aiMetadataModel: proposal.model || model,
@@ -621,7 +624,7 @@ async function runReconvert(state, job, { outputOption, replaceExisting = true }
       appleMusicPlaylistStatus: "pending",
       readyForFinderSync: 0,
       syncState: "",
-      musicPersistentId: "",
+      musicTagVersion: "",
       error: "",
       lastError: "",
       warning: result.warning || "",
@@ -659,6 +662,9 @@ async function runReconvert(state, job, { outputOption, replaceExisting = true }
       readyForFinderSync: job.readyForFinderSync,
       syncState: job.syncState,
       musicPersistentId: job.musicPersistentId,
+      musicDatabaseId: job.musicDatabaseId,
+      musicLocationPath: job.musicLocationPath,
+      musicTagVersion: job.musicTagVersion,
       error: "",
       lastError: error.message,
       warning: job.warning || "",
@@ -1525,7 +1531,7 @@ export async function route(req, res, state, allowedOrigins) {
           appleMusicPlaylistStatus: "pending",
           readyForFinderSync: 0,
           syncState: "",
-          musicPersistentId: "",
+          musicTagVersion: "",
           lastError: "",
         });
         addLog(state.db, `Approved and organized ${updated.artist} — ${updated.title}.`, "ok", "Organize:");
@@ -1619,7 +1625,9 @@ export async function route(req, res, state, allowedOrigins) {
         updateJob(state.db, job.id, {
           appleMusicImportStatus: "imported",
           appleMusicPlaylistStatus: "added",
-          musicPersistentId: result.persistentId,
+          // identityPatch only writes non-empty ids, so a SKIPPED/duplicate
+          // result can never blank an id we already had.
+          ...identityPatch(result),
           readyForFinderSync: 1,
           syncState: "needs_manual",
           lastError: "",

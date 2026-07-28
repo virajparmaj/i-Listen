@@ -40,6 +40,9 @@ const JOB_FIELDS = {
   syncState: "synced_or_needs_manual_sync",
   lastError: "last_error",
   musicPersistentId: "music_persistent_id",
+  musicDatabaseId: "music_database_id",
+  musicLocationPath: "music_location_path",
+  musicTagVersion: "music_tag_version",
   sourceBatch: "source_batch",
   metadataReviewStatus: "metadata_review_status",
   aiMetadataStatus: "ai_metadata_status",
@@ -108,6 +111,14 @@ function migrateSchema(db) {
   addColumnIfMissing(db, "jobs", "synced_or_needs_manual_sync", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(db, "jobs", "last_error", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(db, "jobs", "music_persistent_id", "TEXT NOT NULL DEFAULT ''");
+  // Music identity. `database ID` is the stable library-track identity; the
+  // persistent ID we used to store came from `add ... to playlist`, which returns
+  // the playlist ENTRY, so it could never be looked up again. `music_location_path`
+  // records where Music actually put the file (it copies into its Media folder by
+  // default), and `music_tag_version` tells a stale row from an absent one.
+  addColumnIfMissing(db, "jobs", "music_database_id", "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, "jobs", "music_location_path", "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, "jobs", "music_tag_version", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(db, "jobs", "source_batch", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(db, "jobs", "metadata_review_status", "TEXT NOT NULL DEFAULT 'pending'");
   addColumnIfMissing(db, "jobs", "ai_metadata_status", "TEXT NOT NULL DEFAULT ''");
@@ -271,6 +282,9 @@ export function jobFromRow(row) {
     syncState: row.synced_or_needs_manual_sync || "",
     lastError: row.last_error || "",
     musicPersistentId: row.music_persistent_id || "",
+    musicDatabaseId: row.music_database_id || "",
+    musicLocationPath: row.music_location_path || "",
+    musicTagVersion: row.music_tag_version || "",
     sourceBatch: row.source_batch || "",
     metadataReviewStatus: row.metadata_review_status || "pending",
     aiMetadataStatus: row.ai_metadata_status || "",
