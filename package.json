@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "iListen — a retro iPod Classic-inspired web app with a localhost helper for YouTube-to-iPod conversion.",
+  "description": "iListen \u2014 a retro iPod Classic-inspired web app with a localhost helper for YouTube-to-iPod conversion.",
   "scripts": {
     "dev": "vite",
     "helper": "node --experimental-sqlite server/index.js",
@@ -13,7 +13,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "export:metadata-examples": "node --experimental-sqlite server/scripts/export-metadata-examples.js",
-    "repair:ai-artwork": "node --experimental-sqlite server/scripts/repair-ai-artwork.js"
+    "repair:ai-artwork": "node --experimental-sqlite server/scripts/repair-ai-artwork.js",
+    "repair:music-ids": "node --experimental-sqlite server/scripts/repair-music-ids.js"
   },
   "dependencies": {
     "plist": "^5.0.0",

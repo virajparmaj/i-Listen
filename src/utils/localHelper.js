@@ -179,6 +179,14 @@ export async function selectIpodVolume(path) {
   return request("/ipod/select", { method: "POST", body: JSON.stringify({ path }) });
 }
 
+export async function appleMusicPreflight() {
+  return request("/applemusic/preflight");
+}
+
+export async function reconcileAppleMusic({ dryRun = true } = {}) {
+  return request("/applemusic/reconcile", { method: "POST", body: JSON.stringify({ dryRun }) });
+}
+
 export async function parseLibrary(xml) {
   return request("/library/parse", { method: "POST", body: JSON.stringify({ xml }) });
 }

@@ -12,8 +12,9 @@ import { parseLibraryXml } from "./lib/libraryXml.js";
 import { searchTracks } from "./lib/youtubeSearch.js";
 import { isYoutubeUrl } from "./lib/youtube.js";
 import { retagExport } from "./lib/retag.js";
-import { cleanupStaleIlistenPlaylists, classifyOsascriptError, handoffToAppleMusic, ILISTEN_FOLDER, MASTER_PLAYLIST } from "./lib/appleMusic.js";
+import { cleanupStaleIlistenPlaylists, classifyOsascriptError, handoffToAppleMusic, ILISTEN_FOLDER, MASTER_PLAYLIST, readPlaylistEntries, readPlaylistInventory, reconcilePlaylist } from "./lib/appleMusic.js";
 import { identityPatch } from "./lib/musicIndex.js";
+import { planCloudRowSwap, planReconcile, summarizePreflight, validateReconcilePlan } from "./lib/reconcile.js";
 import { detectIpods, verifyIpodVolume } from "./lib/ipod.js";
 import { appendFileLog } from "./lib/filelog.js";
 import { organizeExport } from "./lib/organize.js";
@@ -1668,15 +1669,102 @@ export async function route(req, res, state, allowedOrigins) {
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/applemusic/preflight") {
+    const approved = selectAppleMusicHandoffJobs(listJobs(state.db)).eligible;
+    try {
+      const [playlists, entries] = await Promise.all([
+        (state.readPlaylistInventory || readPlaylistInventory)(),
+        (state.readPlaylistEntries || readPlaylistEntries)(MASTER_PLAYLIST),
+      ]);
+      const keep = new Set(approved.map((job) => job.musicDatabaseId).filter(Boolean));
+      const plan = planReconcile(entries, keep.size ? keep : new Set(entries.map((e) => e.databaseId)));
+      send(res, req, allowedOrigins, 200, {
+        ...summarizePreflight(playlists, { syncPlaylist: MASTER_PLAYLIST, expectedCount: approved.length }),
+        drift: {
+          duplicates: plan.duplicates.length,
+          orphans: plan.orphans.length,
+          cloudRows: plan.cloudRows.length,
+          danglingRows: plan.danglingRows.length,
+          keptCount: plan.keptCount,
+          total: plan.total,
+        },
+        folder: ILISTEN_FOLDER,
+        master: MASTER_PLAYLIST,
+      });
+    } catch (error) {
+      const classified = classifyOsascriptError(error);
+      send(res, req, allowedOrigins, 200, { blocked: true, kind: classified.kind, message: classified.userMessage });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/applemusic/reconcile") {
+    const body = await readJson(req);
+    // Dry run is the default on purpose: this is the only destructive Apple Music
+    // operation in the app, so it must be opted into explicitly.
+    const dryRun = body.dryRun !== false;
+    const approved = selectAppleMusicHandoffJobs(listJobs(state.db)).eligible;
+    try {
+      const entries = await (state.readPlaylistEntries || readPlaylistEntries)(MASTER_PLAYLIST);
+      const keep = new Set(approved.map((job) => job.musicDatabaseId).filter(Boolean));
+      const plan = planReconcile(entries, keep);
+      const swap = planCloudRowSwap(plan.cloudRows, approved);
+      const summary = {
+        dryRun,
+        playlist: MASTER_PLAYLIST,
+        total: plan.total,
+        keptCount: plan.keptCount,
+        duplicates: plan.duplicates.length,
+        orphans: plan.orphans.length,
+        cloudRows: plan.cloudRows.length,
+        swappable: swap.swappable.length,
+        unmatchedCloudRows: swap.missing.map(({ title, artist, album }) => ({ title, artist, album })),
+        removeIndices: plan.removeIndices,
+      };
+
+      const check = validateReconcilePlan(plan);
+      if (dryRun || !check.ok) {
+        if (!dryRun && !check.ok) addLog(state.db, `Reconcile not run: ${check.reason}`, "warn", "Sync:", "applemusic");
+        send(res, req, allowedOrigins, 200, { ...summary, applied: false, reason: check.reason || "" });
+        return;
+      }
+
+      const result = await (state.reconcilePlaylist || reconcilePlaylist)(MASTER_PLAYLIST, plan.removeIndices);
+      if (!result.ok) {
+        addLog(state.db, `Reconcile aborted: ${result.reason}`, "err", "Sync:", "applemusic");
+        emit(state, { type: "logs", logs: listLogs(state.db) });
+        send(res, req, allowedOrigins, 200, { ...summary, applied: false, reason: result.reason });
+        return;
+      }
+      const msg = `Reconciled "${MASTER_PLAYLIST}": removed ${result.removed} row${result.removed === 1 ? "" : "s"} (${plan.duplicates.length} duplicate, ${plan.orphans.length} stale), kept ${plan.keptCount}.`;
+      addLog(state.db, msg, "ok", "Sync:", "applemusic");
+      void appendFileLog(state.project, "applemusic.log", msg);
+      emit(state, { type: "logs", logs: listLogs(state.db) });
+      send(res, req, allowedOrigins, 200, { ...summary, applied: true, removed: result.removed, logs: listLogs(state.db) });
+    } catch (error) {
+      const classified = classifyOsascriptError(error);
+      addLog(state.db, classified.userMessage, "err", "Sync:", "applemusic");
+      send(res, req, allowedOrigins, 200, { blocked: true, kind: classified.kind, message: classified.userMessage, logs: listLogs(state.db) });
+    }
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/ipod/devices") {
     const detection = await detectIpods();
+    const d = detection.device?.connected ? detection.device : null;
+    // Write every key unconditionally. These used to be written only while a
+    // device was attached, so after a disconnect the app kept reporting a stale
+    // name and capacity next to connected:false.
     setState(state.db, "ipod_detected", detection.connected ? "1" : "0");
-    if (detection.device?.connected) {
-      setState(state.db, "ipod_name", detection.device.name || "");
-      setState(state.db, "ipod_free_space", String(detection.device.freeBytes || 0));
-      setState(state.db, "ipod_capacity", String(detection.device.capacityBytes || 0));
-      setState(state.db, "disk_use_enabled", detection.device.diskUseEnabled ? "1" : "0");
-      setState(state.db, "can_sync_finder", detection.device.canSyncViaFinder ? "1" : "0");
+    setState(state.db, "ipod_name", d?.name || "");
+    setState(state.db, "ipod_free_space", String(d?.freeBytes || 0));
+    setState(state.db, "ipod_capacity", String(d?.capacityBytes || 0));
+    setState(state.db, "disk_use_enabled", d?.diskUseEnabled ? "1" : "0");
+    setState(state.db, "can_sync_finder", d?.canSyncViaFinder ? "1" : "0");
+    if (d) setState(state.db, "ipod_last_seen_at", isoNow());
+    if (!d?.volumePath) {
+      const remembered = getState(state.db, "ipod_volume_path", "");
+      if (remembered && !existsSync(remembered)) setState(state.db, "ipod_volume_path", "");
     }
     void appendFileLog(state.project, "ipod.log", `devices: connected=${detection.connected} mounted=${detection.mounted.length} usb=${detection.usb.length}`);
     send(res, req, allowedOrigins, 200, { ...detection, selectedPath: getState(state.db, "ipod_volume_path", "") });

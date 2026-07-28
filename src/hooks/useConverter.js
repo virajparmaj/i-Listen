@@ -15,7 +15,9 @@ import {
   connectEvents,
   coverArtUrlForJob,
   createPlaylist,
+  appleMusicPreflight,
   cleanupAppleMusic,
+  reconcileAppleMusic,
   handoffToIpod,
   helperBaseUrl,
   helperHealth,
@@ -483,6 +485,18 @@ export function useConverter() {
     return result;
   }, [refreshFromResult]);
 
+  const loadPreflight = useCallback(async () => {
+    if (!helperRef.current.connected) throw new Error("Local helper is not connected.");
+    return appleMusicPreflight();
+  }, []);
+
+  const reconcilePlaylist = useCallback(async ({ dryRun = true } = {}) => {
+    if (!helperRef.current.connected) throw new Error("Local helper is not connected.");
+    const result = await reconcileAppleMusic({ dryRun });
+    if (result?.logs) refreshFromResult(result);
+    return result;
+  }, [refreshFromResult]);
+
   const refreshIpod = useCallback(async () => {
     if (!helperRef.current.connected) return null;
     try {
@@ -523,7 +537,7 @@ export function useConverter() {
       retry, clearCompleted, resetAll, applyGlobalCover, updateSettings,
       setGlobalCover, pushLog, exportPlaylist,
       approveTrack, approveTracks, aiApproveTrack, updateTrackAudioIssues, repairAudioTrack, repairAudioTracks, reconvertTrack, reconvertTracks,
-      handoffToAppleMusic, cleanupMusicPlaylists, refreshIpod, selectIpod,
+      handoffToAppleMusic, cleanupMusicPlaylists, loadPreflight, reconcilePlaylist, refreshIpod, selectIpod,
     },
   };
 }

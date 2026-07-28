@@ -6,6 +6,7 @@ import { Icon } from "./ui/Icon.jsx";
 import { IpodDevicePanel } from "./IpodDevicePanel.jsx";
 import { PlaylistStructurePanel } from "./PlaylistStructurePanel.jsx";
 import { ManualFallback } from "./ManualFallback.jsx";
+import { PreflightCard } from "./PreflightCard.jsx";
 import { AudioIssueFilters } from "./AudioIssueFilters.jsx";
 import { sortForSyncTracks } from "../utils/trackOrdering.js";
 import { audioIssueLabels, filterByAudioIssues, hasAudioIssue, needsAudioRepair } from "../utils/audioRepair.js";
@@ -138,6 +139,8 @@ export function SyncView({ tracks, helper, ipod, actions, onShowToast, onEdit, o
   const [cleanupBusy, setCleanupBusy] = React.useState(false);
   const [deletingId, setDeletingId] = React.useState("");
   const [blocked, setBlocked] = React.useState(null);
+  const [preflight, setPreflight] = React.useState(null);
+  const [preflightBusy, setPreflightBusy] = React.useState(false);
   const { refreshIpod } = actions;
 
   React.useEffect(() => {
@@ -253,6 +256,43 @@ export function SyncView({ tracks, helper, ipod, actions, onShowToast, onEdit, o
     }
   };
 
+  const onCheckPlaylist = async () => {
+    setPreflightBusy(true);
+    try {
+      setPreflight(await actions.loadPreflight());
+    } catch (error) {
+      onShowToast(error.message);
+    } finally {
+      setPreflightBusy(false);
+    }
+  };
+
+  const onReconcile = async () => {
+    setPreflightBusy(true);
+    try {
+      // Dry run first so the count shown on the button is what actually happens.
+      const preview = await actions.reconcilePlaylist({ dryRun: true });
+      if (preview.blocked) {
+        onShowToast(preview.message);
+        return;
+      }
+      if (!preview.removeIndices?.length) {
+        onShowToast(preview.reason || "Playlist already matches iListen.");
+        setPreflight(await actions.loadPreflight());
+        return;
+      }
+      const result = await actions.reconcilePlaylist({ dryRun: false });
+      if (result.blocked) onShowToast(result.message);
+      else if (result.applied) onShowToast(`Removed ${result.removed} extra row${result.removed === 1 ? "" : "s"}; kept ${result.keptCount}.`);
+      else onShowToast(result.reason || "Nothing to reconcile.");
+      setPreflight(await actions.loadPreflight());
+    } catch (error) {
+      onShowToast(error.message);
+    } finally {
+      setPreflightBusy(false);
+    }
+  };
+
   const onToggleAllVisible = () => {
     if (!visibleComplete.length) return;
     onSelectTracks?.(allVisibleSelected ? [] : visibleComplete.map((track) => track.id));
@@ -304,6 +344,14 @@ export function SyncView({ tracks, helper, ipod, actions, onShowToast, onEdit, o
           ))}
         </div>
       </Card>
+
+      <PreflightCard
+        preflight={preflight}
+        busy={preflightBusy}
+        disabled={!helper.connected}
+        onRefresh={onCheckPlaylist}
+        onReconcile={onReconcile}
+      />
 
       <ManualFallback blocked={blocked} onRetry={onHandoff} onShowToast={onShowToast} />
 
