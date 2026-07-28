@@ -1013,7 +1013,7 @@ No main Apple Music library tracks were intentionally deleted, and the physical 
 2026-06-21 Apple Music `iListen` folder reset for Finder 197-track sync count:
 
 ```text
-User saw Finder report 197 tracks selected for sync even though `iPod Sync` itself was clean. Rechecked state: iListen DB had 145 approved Bass Safe rows, all marked added/ready; Apple Music `iPod Sync` had 145 tracks and 0 duplicate rows. Several other standalone user playlists (the largest holding 169, 66, 51, and 33 tracks) still existed in Music and can inflate Finder sync counts if selected. Playlist names are intentionally not recorded here - this repo is public.
+User saw Finder report 197 tracks selected for sync even though `iPod Sync` itself was clean. Rechecked state: iListen DB had 145 approved Bass Safe rows, all marked added/ready; Apple Music `iPod Sync` had 145 tracks and 0 duplicate rows. Several other standalone user playlists (the largest holding 169, 66, 51, and 33 tracks) still existed in Music and can inflate Finder's sync count if selected. Playlist names are intentionally not recorded here - this repo is public.
 Backups created:
 - DB: `/Users/veerr_89/Music/iListen Project/backups/ilisten-before-ilisten-folder-reset-20260621-115359.sqlite`
 - Apple Music playlist inventory: `/Users/veerr_89/Music/iListen Project/backups/apple-music-playlists-before-ilisten-folder-reset-20260621-115453.tsv`
