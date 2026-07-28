@@ -37,7 +37,22 @@ export const AUDIO_REPAIR_PRESETS = {
   },
 };
 
-export const AUDIO_REPAIR_OUTPUT_OPTIONS = new Set(Object.keys(AUDIO_REPAIR_PRESETS));
+/**
+ * Every output option `chooseOutputPlan` can actually build. Anything not in
+ * here must be rejected at the API boundary rather than silently falling
+ * through to a different codec than the user asked for.
+ *
+ * Declared after AUDIO_REPAIR_PRESETS on purpose: it spreads that object's
+ * keys, so hoisting it above the const would throw a TDZ ReferenceError.
+ */
+export const SUPPORTED_OUTPUT_OPTIONS = new Set([
+  "best-youtube",
+  "ipod-safe-aac",
+  "aac-256",
+  "alac",
+  "mp3-v0",
+  ...Object.keys(AUDIO_REPAIR_PRESETS),
+]);
 
 export function runProcess(command, args, options = {}) {
   const { cwd, signal, onStdout, onStderr } = options;
@@ -125,7 +140,10 @@ export function chooseOutputPlan(job, probe) {
       mode: requested,
       repairPreset: requested,
       codec: "aac",
-      args: ["-af", AUDIO_REPAIR_PRESETS[requested].filter, "-c:a", "aac", "-b:a", "256k"],
+      // -ar 48000 is load-bearing: loudnorm runs its internal chain at 192 kHz,
+      // and the native aac encoder has no 192 kHz mode, so it silently snaps the
+      // output to 96 kHz without this.
+      args: ["-af", AUDIO_REPAIR_PRESETS[requested].filter, "-ar", "48000", "-c:a", "aac", "-b:a", "256k"],
     };
   }
   if (requested === "mp3-v0") return { mode: "transcode", codec: "mp3", args: ["-c:a", "libmp3lame", "-q:a", "0"] };
@@ -138,6 +156,12 @@ export function chooseOutputPlan(job, probe) {
   }
   if (requested === "aac-256") return { mode: "transcode", codec: "aac", args: ["-c:a", "aac", "-b:a", "256k"] };
   if (requested === "alac") return { mode: "transcode", codec: "alac", args: ["-c:a", "alac"] };
+  if (requested !== "best-youtube") {
+    // Never fall through to a different codec than was asked for: an unknown id
+    // used to land on the ALAC branch below, so picking "MP3 320" produced a
+    // ~40 MB ALAC file named .m4a.
+    throw new Error(`Unsupported output option: ${requested}`);
+  }
   if (codec === "aac" && isMp4Family) return { mode: "copy-aac", codec: "aac", args: ["-c:a", "copy"] };
   return { mode: "transcode", codec: "alac", args: ["-c:a", "alac"] };
 }

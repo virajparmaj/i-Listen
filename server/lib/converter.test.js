@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { AUDIO_REPAIR_PRESETS, chooseOutputPlan, reconvertExistingJob, writePlaylists } from "./converter.js";
+import { AUDIO_REPAIR_PRESETS, SUPPORTED_OUTPUT_OPTIONS, chooseOutputPlan, reconvertExistingJob, writePlaylists } from "./converter.js";
 const probe = (codec, formatName) => ({
   streams: [{ codec_type: "audio", codec_name: codec }],
   format: { format_name: formatName },
@@ -99,8 +99,38 @@ describe("smart output planning", () => {
 
       expect(plan.mode).toBe(outputOption);
       expect(plan.codec).toBe("aac");
-      expect(plan.args).toEqual(["-af", preset.filter, "-c:a", "aac", "-b:a", "256k"]);
+      expect(plan.args).toEqual(["-af", preset.filter, "-ar", "48000", "-c:a", "aac", "-b:a", "256k"]);
     }
+  });
+
+  it("pins repair presets to 48 kHz so loudnorm cannot snap the encoder to 96 kHz", () => {
+    // loudnorm runs its internal chain at 192 kHz and the native aac encoder has
+    // no 192 kHz mode, so without -ar the output silently lands at 96 kHz.
+    const plan = chooseOutputPlan({ outputOption: "bass-safe-plus" }, probe("opus", "matroska,webm"));
+
+    expect(plan.args).toContain("-ar");
+    expect(plan.args[plan.args.indexOf("-ar") + 1]).toBe("48000");
+  });
+
+  it("throws on an unknown output option instead of silently falling back to ALAC", () => {
+    // These ids used to reach the terminal ALAC branch, so asking for "MP3 320"
+    // produced a large ALAC file named .m4a.
+    for (const outputOption of ["mp3-320", "mp3-256", "archive", "totally-made-up"]) {
+      expect(() => chooseOutputPlan({ outputOption }, probe("opus", "matroska,webm")))
+        .toThrow(/Unsupported output option/);
+    }
+  });
+
+  it("registers every buildable output option, including the repair presets", () => {
+    for (const outputOption of ["best-youtube", "ipod-safe-aac", "aac-256", "alac", "mp3-v0"]) {
+      expect(SUPPORTED_OUTPUT_OPTIONS.has(outputOption)).toBe(true);
+    }
+    for (const outputOption of Object.keys(AUDIO_REPAIR_PRESETS)) {
+      expect(SUPPORTED_OUTPUT_OPTIONS.has(outputOption)).toBe(true);
+    }
+    // Guard the reconvert path: runAudioRepair persists the preset id into
+    // job.outputOption, so an option-less reconvert of a repaired job must resolve.
+    expect(SUPPORTED_OUTPUT_OPTIONS.has("bass-safe-plus")).toBe(true);
   });
 
   it("writes one playlist file for each assigned playlist plus an all export", async () => {

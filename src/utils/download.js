@@ -73,7 +73,6 @@ export function sanitizePathSegment(value, fallback = "Untitled") {
 function extensionFor(t) {
   if (t.ext) return t.ext;
   if (t.format === "aac") return "m4a";
-  if (t.format === "archive") return "flac";
   return "mp3";
 }
 

@@ -6,7 +6,7 @@ import { spawn } from "node:child_process";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { addLog, addMetadataExample, createJobs, createJobsFromMatches, existingTrackKeys, getJob, getState, listJobs, listLogs, listMetadataExamples, openDatabase, removeJob, setState, trackKey, updateJob } from "./lib/db.js";
-import { AUDIO_REPAIR_PRESETS, JobRunner, reconvertExistingJob, writePlaylists } from "./lib/converter.js";
+import { AUDIO_REPAIR_PRESETS, JobRunner, SUPPORTED_OUTPUT_OPTIONS, reconvertExistingJob, writePlaylists } from "./lib/converter.js";
 import { analyzeAudio } from "./lib/audioAnalysis.js";
 import { parseLibraryXml } from "./lib/libraryXml.js";
 import { searchTracks } from "./lib/youtubeSearch.js";
@@ -31,7 +31,10 @@ import { splitYoutubeUrls } from "./lib/youtube.js";
 
 const PORT = Number(process.env.ILISTEN_PORT || 4317);
 const AI_METADATA_HEALTH_CACHE_MS = 30000;
-const RECONVERT_OUTPUT_OPTIONS = new Set(["best-youtube", "ipod-safe-aac", "mp3-v0", "aac-256", "alac"]);
+// Single source of truth with the converter. Repair-preset ids get persisted into
+// job.outputOption by runAudioRepair, so omitting them here made an option-less
+// reconvert of a repaired job 400 and rendered an empty picker in the UI.
+const RECONVERT_OUTPUT_OPTIONS = SUPPORTED_OUTPUT_OPTIONS;
 const AUDIO_ISSUE_TAGS = new Set(["bass_crackle", "left_channel_disturbance"]);
 const ACTIVE_AUDIO_REPAIR_STATUSES = new Set(["analyzing", "repair_queued", "repairing"]);
 
@@ -1035,7 +1038,12 @@ export async function route(req, res, state, allowedOrigins) {
       send(res, req, allowedOrigins, 400, { error: "Paste one or more valid YouTube links.", rejected });
       return;
     }
-    const result = createJobs(state.db, accepted, body.outputOption || "best-youtube");
+    const outputOption = body.outputOption || "best-youtube";
+    if (!SUPPORTED_OUTPUT_OPTIONS.has(outputOption)) {
+      send(res, req, allowedOrigins, 400, { error: `Unsupported output option: ${outputOption}` });
+      return;
+    }
+    const result = createJobs(state.db, accepted, outputOption);
     addLog(state.db, `Added ${result.created.length} YouTube link${result.created.length === 1 ? "" : "s"}.`, null, "Queue:");
     if (rejected.length) addLog(state.db, `${rejected.length} non-YouTube link${rejected.length === 1 ? "" : "s"} rejected.`, "warn", "Queue:");
     emit(state, { type: "jobs", jobs: result.jobs, logs: listLogs(state.db) });

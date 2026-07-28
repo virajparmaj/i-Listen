@@ -179,10 +179,6 @@ export async function selectIpodVolume(path) {
   return request("/ipod/select", { method: "POST", body: JSON.stringify({ path }) });
 }
 
-export async function ipodStatus() {
-  return request("/ipod/status");
-}
-
 export async function parseLibrary(xml) {
   return request("/library/parse", { method: "POST", body: JSON.stringify({ xml }) });
 }

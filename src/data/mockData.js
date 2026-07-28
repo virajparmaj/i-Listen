@@ -92,26 +92,6 @@ export const OUTPUT_OPTIONS = [
     compatibility: "ID3v2.3-safe MP3 for legacy iPods",
   },
   {
-    value: "mp3-256",
-    label: "MP3 256 kbps CBR",
-    shortLabel: "MP3 256",
-    format: "mp3",
-    ext: "mp3",
-    kbps: 256,
-    encoder: "libmp3lame -b:a 256k",
-    compatibility: "Predictable-size MP3",
-  },
-  {
-    value: "mp3-320",
-    label: "MP3 320 kbps CBR",
-    shortLabel: "MP3 320",
-    format: "mp3",
-    ext: "mp3",
-    kbps: 320,
-    encoder: "libmp3lame -b:a 320k",
-    compatibility: "Maximum MP3 bitrate",
-  },
-  {
     value: "aac-256",
     label: "AAC-LC 256 kbps M4A",
     shortLabel: "AAC 256",
@@ -120,16 +100,6 @@ export const OUTPUT_OPTIONS = [
     kbps: 256,
     encoder: "AAC-LC 256 kbps M4A",
     compatibility: "Apple-native efficient iPod output",
-  },
-  {
-    value: "archive",
-    label: "Project source archive",
-    shortLabel: "Source archive",
-    format: "archive",
-    ext: "m4a",
-    kbps: null,
-    encoder: "Keep downloaded source beside exports",
-    compatibility: "Retains the best downloaded YouTube source for reruns.",
   },
 ];
 
