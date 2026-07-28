@@ -1054,6 +1054,156 @@ No Apple Music handoff, Finder sync, iPod database write, live conversion, or li
 Next user-facing step: flag one affected completed track, run Analyze, choose Bass Safe Plus or Stereo Blend Safe, Reconvert, then hand off/sync the repaired track through the normal Apple Music/Finder flow.
 ```
 
+2026-07-27 iPhone-target project — Phase 0 diagnosis (read-only) and Phases 1-2 implemented:
+
+```text
+DIAGNOSIS (read-only, artifacts in backups/diagnostic-*-20260727-223454.*):
+- Apple Music `iPod Sync` currently holds 291 rows, not 145. 145 duplicate title|artist|album
+  groups x2 (+1). All 291 are `file track`, all with a valid location, but only 146 UNIQUE
+  database IDs -> the duplication is at the PLAYLIST-ENTRY level, not the library level.
+- All 291 rows point into ~/Music/Music/Media.localized. ZERO point at the iListen exports
+  folder. Music's "Copy files to Music Media folder" is ON, so `add` copies the file and the
+  stored location is never the export path. The old path-keyed dedupe therefore stopped
+  matching after the first add; the 2026-06-21 Bass Safe reconvert reset all 145 rows to
+  pending and the next handoff appended the whole library a second time.
+- The Apple Music library is 718 tracks = 273 `file track` + 445 `shared track`. The 445
+  shared rows are Apple Music catalog entries that stopped playing when the subscription
+  lapsed: 441 unique dead songs, 28 already re-acquired by iListen, 413 NOT re-acquired.
+- Every personal playlist except `iPod Sync` and `Recently Played` is 90-99% dead. Across 23
+  non-smart user playlists the worst ratios are 152/153, 153/169, 109/115, 99/104, and 91/94
+  dead rows. (Playlist names are intentionally not recorded here - this repo is public. Run
+  the Phase 0 diagnostic to regenerate the named breakdown locally; artifacts land in
+  `backups/diagnostic-playlist-health-<ts>.tsv`, which is outside the repo.)
+- This is the real answer to the user's "117 scattered songs": the songs were Apple Music
+  catalog downloads. Music still lists them so they look present, but they do not play and
+  their playlists are hollow. Recovery path = re-acquire via the existing Convert-with-XML
+  flow (Library.xml -> playlist pick -> YouTube search -> convert).
+- Only 3 non-iListen local files exist (Cry | Cigarettes After Sex, Starboy ft. Daft Punk
+  ft. Daft Punk, The Feeling ft. Halsey) and zero FairPlay .m4p files, so no device-rescue
+  / adopt-from-iPod feature is needed. That was cut from the plan.
+- macOS is 26.5.2. `system_profiler SPUSBDataType` no longer exists (only SPUSBHostDataType),
+  so `scanUsbIpods()` in server/lib/ipod.js is dead code returning []. iPhone 11
+  ("Viraj's 11", iOS 26.5) is already paired to this Mac.
+
+PHASE 1 (code) - stop producing wrong files:
+- server/lib/converter.js: repair-preset branch now emits `-ar 48000`. Proven empirically:
+  without it the bass-safe-plus chain produced 96 kHz AAC (loudnorm runs at 192 kHz
+  internally and native aac has no 192 kHz mode); with it, 48 kHz.
+- Added exported SUPPORTED_OUTPUT_OPTIONS (declared AFTER AUDIO_REPAIR_PRESETS - hoisting it
+  above is a TDZ ReferenceError). chooseOutputPlan now THROWS on an unknown id instead of
+  silently returning ALAC; picking "MP3 320" used to yield a ~40 MB ALAC file named .m4a.
+- Removed the unused AUDIO_REPAIR_OUTPUT_OPTIONS export.
+- server/index.js: RECONVERT_OUTPUT_OPTIONS is now SUPPORTED_OUTPUT_OPTIONS (it previously
+  omitted all five repair presets, so an option-less reconvert of a repaired job 400'd);
+  POST /jobs validates body.outputOption.
+- src/data/mockData.js: removed the unimplemented mp3-256 / mp3-320 / archive options;
+  removed the archive->flac mapping in src/utils/download.js.
+- Deleted dead code: src/components/SyncStatusBadge.jsx, ipodStatus() in localHelper.js,
+  appleMusicStatus() + STATUS_SCRIPT. GET /ipod/status kept for the Phase 3 preflight.
+
+PHASE 2 (code) - Music identity layer:
+- NEW server/lib/musicIndex.js: tagVersion(job) (sha1 of everything Music mirrors, incl.
+  artwork size+mtime), normalizeTagKey, buildIndex, resolvePresence (databaseId -> outputPath
+  -> musicLocationPath -> tag key), classifyJob (add | refresh | current), identityPatch
+  (never writes an empty id over a stored one), chunk.
+- NEW server/lib/appleMusicScripts.js holds all AppleScript sources. Field separator is now
+  US (0x1F), not tab; parseResultLines switched in the same commit.
+  * ADD_TO_PLAYLIST_SCRIPT: bulk-reads the playlist (with a per-item fallback if the bulk get
+    throws on a cloud row), reads back `location of addedTrack` so the Media path is
+    recorded, returns the EXISTING track's identity on the SKIPPED branch, and compares
+    paths inside `considering case and diacriticals`.
+  * LIST_PLAYLIST_SCRIPT: new playlist snapshot used to build the identity index.
+  * REFRESH_TRACK_SCRIPT: looks up by `database ID` first. The old lookup used the persistent
+    ID returned by `add ... to playlist`, which is the playlist ENTRY, not the library track,
+    so it could never match and always fell through to a full library scan. Added an optional
+    argv[12] relinkPath that sets `location`.
+  * CLEAN_STALE_PLAYLISTS_SCRIPT: now filters smart/special and deletes by object reference.
+    `folder playlist` inherits from `user playlist`, so a FOLDER named "iPod - ..." was
+    previously in the delete set and would have taken its contents with it.
+- IMPORTANT AppleScript gotcha found the hard way: `artists` and `albums` are reserved terms
+  inside a `tell application "Music"` block. `set artists to {}` fails with
+  "Can't set <constant eSrAkSrR> to {}. Access not allowed. (-10003)". Locals are now
+  nameList / artistList / albumList / pathList.
+- handoffToAppleMusic is now classify -> add -> refresh instead of blind append. Adds are
+  chunked 25 per osascript spawn with an onChunk callback so a 300 s SIGKILL loses at most
+  25 rows.
+- DB migration (additive): music_database_id, music_location_path, music_tag_version.
+- Metadata edits/organize/reconvert/ai-approve now clear `musicTagVersion` instead of
+  `musicPersistentId`. It is still the same track; only the tags went stale. This is what
+  routes a changed track to refresh-in-place rather than a duplicate add.
+
+LIVE VALIDATION (read-only, nothing written):
+- readPlaylistEntries("iPod Sync") parsed all 291 rows, 291/291 with a database ID.
+- Classifying the 146 approved jobs against the live playlist gives
+  {"add":0,"refresh":146,"current":0}. Under the old code the next handoff would have added
+  all 146 again. This is the duplicate bug fixed, demonstrated against live data.
+
+VERIFICATION: npm test -> 24 files / 178 tests passed. npm run lint -> passed.
+npm run build -> passed (JS 282.75 kB / gzip 81.05 kB).
+No Apple Music, DB, device, or export-file state was modified in Phases 0-2.
+
+PHASE 3 (code) - preflight + reconcile:
+- NEW server/lib/reconcile.js (pure, no osascript): planReconcile (keeps the FIRST occurrence
+  of a duplicated database ID, removes later ones and any row not in the approved set;
+  returns 1-based indices), validateReconcilePlan (refuses a no-op and refuses anything that
+  would leave the playlist empty), planCloudRowSwap (matches unplayable cloud rows to owned
+  local files by normalized artist|title|album), summarizePreflight.
+- NEW AppleScripts: PREFLIGHT_SCRIPT (inventory every user playlist with trackCount +
+  nonFileCount) and RECONCILE_PLAYLIST_SCRIPT (deletes playlist ENTRIES by 1-based index;
+  refuses smart/special playlists and refuses to empty the playlist). Removal is
+  `delete track i of pl` inside a user playlist, which removes membership only - removing
+  from the library would need `delete track i of library playlist 1`, which is never done.
+  appleMusic.js sorts indices descending so callers cannot hit the shifting-index bug.
+- NEW endpoints: GET /applemusic/preflight (read-only) and POST /applemusic/reconcile with
+  dryRun defaulting to TRUE. Both injectable via state.readPlaylistInventory /
+  state.readPlaylistEntries / state.reconcilePlaylist for tests.
+- NEW src/components/PreflightCard.jsx ("Before you sync") rendered in SyncView above
+  ManualFallback; actions.loadPreflight / actions.reconcilePlaylist in useConverter.
+  The reconcile button always dry-runs first so the count on the button is what happens.
+- summarizePreflight returns `deadPlaylistRows`, deliberately NOT a song count: a song in
+  five playlists contributes five rows (1678 rows vs 445 unique dead songs here).
+- NEW server/scripts/repair-music-ids.js + `npm run repair:music-ids` (dry run by default,
+  --apply to write). Resolves each approved job to its live playlist row and records the real
+  database ID + the path Music actually stores. It deliberately leaves musicTagVersion empty
+  so the next handoff refreshes once rather than assuming Music's tags are correct.
+- Fixed GET /ipod/devices: device keys are now written unconditionally (they were only
+  written inside `if (connected)`, which is why app_state said ipod_detected=1 with nothing
+  mounted). Added ipod_last_seen_at and clearing of a stale ipod_volume_path.
+
+LIVE VALIDATION of Phase 3 (read-only, nothing written to Music):
+- PREFLIGHT_SCRIPT parsed 28 playlists.
+- Reconcile DRY RUN on `iPod Sync`: 291 rows -> keep 146, remove 145 (145 duplicate, 0 stale,
+  0 cloud, 0 dangling).
+- `npm run repair:music-ids` dry run: 146 matched, 0 unmatched; all 146 currently stored
+  inside Music's Media folder.
+- Browser-verified on http://127.0.0.1:5173 Sync tab: the card renders and reports
+  "iPod Sync: 291 tracks - iListen has 146 approved", "145 duplicate",
+  "Fix playlist (145 to remove)", plus the 23-other-playlists Finder warning.
+
+VERIFICATION after Phase 3: npm test -> 25 files / 193 tests passed. npm run lint -> passed.
+npm run build -> passed (JS 287.10 kB / gzip 82.06 kB).
+
+BACKUPS TAKEN 2026-07-27 (Phase 4 prerequisites, nothing applied yet):
+- backups/ilisten-before-music-id-backfill-20260727-225737.sqlite
+- backups/ipod-sync-before-reconcile-20260727-225737.tsv
+- backups/apple-music-playlists-before-reconcile-20260727-225737.tsv
+
+NEXT STEP (blocked on a user action):
+1. User turns OFF Music > Settings > Files > "Copy files to Music Media folder when adding to
+   library". Not scriptable.
+2. `npm run repair:music-ids -- --apply`
+3. Sync tab > Before you sync > Fix playlist  (or POST /applemusic/reconcile dryRun:false)
+   -> expected result: `iPod Sync` goes 291 -> 146 with zero duplicates.
+Only after that should Phases 5-7 run.
+
+REMAINING PHASES (plan approved, not yet done): 4 first live reconcile, 5 device targets
+(iPod/iPhone), 6 loudness-safe 192k audio pipeline, 7 live re-derive + sync.
+Plan file: ~/.claude/plans/so-currently-the-structure-eventual-spark.md
+
+Left running at end of session: helper PID 52591 (/tmp/ilisten-helper-phase3.log) and Vite on
+127.0.0.1:5173. Uncommitted working tree.
+```
+
 ## Maintenance Rule For Future Agents
 
 Before ending any substantial session, update this file with:
