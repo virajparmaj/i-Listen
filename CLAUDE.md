@@ -1204,6 +1204,77 @@ Left running at end of session: helper PID 52591 (/tmp/ilisten-helper-phase3.log
 127.0.0.1:5173. Uncommitted working tree.
 ```
 
+2026-08-07 iPhone sync preparation and first live reconcile:
+
+```text
+LIVE LIBRARY / APPLE MUSIC:
+- Two new completed rows were cleaned manually from YouTube + Apple/iTunes catalog evidence;
+  local AI was not used:
+  - Dooriyan | Pritam & Mohit Chauhan | Love Aaj Kal (Original Motion Picture Soundtrack)
+    | 2009 | track 4
+  - Bin Tere | Shafqat Amanat Ali, Vishal & Shekhar & Sunidhi Chauhan |
+    I Hate Luv Storys (Original Motion Picture Soundtrack) | 2010 | track 2
+- Both were moved to canonical export paths, retagged, approved, validated, given official
+  1000x1000 Apple/iTunes artwork, and handed off to Music.
+- A later pending row was also cleaned manually without AI and added to both sync playlists:
+  Mann Mera | Gajendra Verma | Table No. 21 (Original Motion Picture Soundtrack) - EP |
+  2013 | track 2. It uses the matching official 1000x1000 Apple/iTunes artwork.
+- Back-filled Music identities for the pre-existing 146 approved rows. The live iPod Sync
+  reconcile dry run then correctly reported 291 total / 146 keep / 145 duplicate / 0 stale.
+- Applied reconcile to playlist MEMBERSHIPS only: iPod Sync went 291 -> 146, then the two new
+  tracks were added for a final count of 148. No Music library tracks were deleted.
+- Repaired the older Starboy (feat. Daft Punk) handoff status by removing its one stale
+  membership from each sync playlist and re-adding the verified local file. The Music copy
+  and the iListen export are byte-identical SHA-256, have correct tags, and contain 1000x1000
+  artwork.
+- Created iListen/iPhone Sync by duplicating the clean Music track references from iPod Sync;
+  this does not import another copy of each song.
+- Final Apple Music state after adding Mann Mera:
+  - iPod Sync: 149 rows / 149 unique database IDs / 149 unique title-artist-album keys /
+    0 missing locations / 0 missing files / 0 non-file rows.
+  - iPhone Sync: same 149 rows and identity checks, also 0 duplicates or missing files;
+    all 149 Music rows are enabled (0 unchecked/disabled).
+  - iListen DB: 149 complete / 149 approved / 149 validated / 149 added / 149 Finder-ready /
+    0 needs review.
+- Connected device: Viraj's 16 Pro (iPhone 16 Pro), paired, wired, tunnel connected.
+- Finder is the only remaining step: select Viraj's 16 Pro -> Music -> selected playlists ->
+  tick ONLY iPhone Sync -> Apply/Sync. If the Music options are absent, turn off Sync Library
+  on the iPhone. If Finder offers Erase and Sync, stop and confirm before accepting.
+
+CODE FIXES:
+- RECONCILE_PLAYLIST_SCRIPT no longer uses Music's reserved `removed` term; it uses
+  removedCount, fixing AppleScript -10003 during live apply.
+- REFRESH_TRACK_SCRIPT now receives musicLocationPath and has a per-track database ID /
+  persistent ID / path fallback when Music's bulk library lookup fails.
+- Regression assertions added in server/lib/appleMusic.test.js.
+
+BACKUPS:
+- backups/ilisten-before-iphone-sync-20260807-193914.sqlite
+- backups/ipod-sync-before-iphone-sync-20260807-193914.tsv
+- backups/apple-music-playlists-before-iphone-sync-20260807-193914.tsv
+- backups/ipod-sync-before-starboy-relink-20260807-194726.tsv
+- backups/iphone-sync-before-starboy-relink-20260807-194726.tsv
+
+VERIFICATION:
+- npm test -> 25 files / 195 tests passed.
+- npm run lint -> passed.
+- npm run build -> passed (JS 287.10 kB / gzip 82.06 kB).
+- Browser Sync tab -> helper ready, 148 converted, 148 approved, 148 in iPod Sync,
+  "Nothing new to add; sync in Finder", preflight OK.
+- Final post-Mann-Mera command-line preflight -> iPod Sync and iPhone Sync each have 149
+  unique local file tracks, exact database-ID parity, 0 duplicates, 0 missing files, 0
+  cloud/non-file rows, and iPhone Sync has 149 enabled / 0 disabled tracks.
+- Persistent local services use launchd labels com.ilisten.helper and com.ilisten.vite;
+  helper http://127.0.0.1:4317 and UI http://127.0.0.1:5173 were healthy at handoff.
+
+KNOWN FOLLOW-UP:
+- The current Sync UI is still iPod-specific and does not render/select iPhone Sync; the live
+  iPhone playlist is ready in Music/Finder, but Phase 5 device-target UI/state code remains.
+- Music is still copying new imports into Music/Media.localized. The new identity layer records
+  the real path and prevents playlist duplication, but turning off Music > Settings > Files >
+  Copy files to Music Media folder will avoid redundant future storage copies.
+```
+
 ## Maintenance Rule For Future Agents
 
 Before ending any substantial session, update this file with:
