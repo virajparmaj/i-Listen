@@ -187,6 +187,7 @@ export async function refreshAppleMusicTrack(job, { artworkPath = job.customCove
     firstNumber(job.disc),
     artworkPath || "",
     relinkPath || "",
+    job.musicLocationPath || "",
   ]);
   return parseResultLines(stdout).get(job.outputPath) || {
     status: "failed",

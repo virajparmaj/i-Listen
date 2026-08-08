@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { classifyOsascriptError, ILISTEN_FOLDER, MASTER_PLAYLIST, parsePlaylistLines, parseResultLines } from "./appleMusic.js";
-import { FIELD_SEP } from "./appleMusicScripts.js";
+import { FIELD_SEP, RECONCILE_PLAYLIST_SCRIPT, REFRESH_TRACK_SCRIPT } from "./appleMusicScripts.js";
 
 const line = (...fields) => fields.join(FIELD_SEP);
 
@@ -29,6 +29,17 @@ describe("appleMusic handoff helpers", () => {
     const classified = classifyOsascriptError({ message: "some weird failure" });
     expect(classified.kind).toBe("unknown");
     expect(classified.userMessage).toContain("weird");
+  });
+
+  it("avoids Music's reserved removed term in the reconcile script", () => {
+    expect(RECONCILE_PLAYLIST_SCRIPT).toContain("set removedCount to 0");
+    expect(RECONCILE_PLAYLIST_SCRIPT).not.toMatch(/set removed to/);
+  });
+
+  it("falls back to a per-track identity scan when Music bulk lookup fails", () => {
+    expect(REFRESH_TRACK_SCRIPT).toContain("set knownPath to item 13 of argv");
+    expect(REFRESH_TRACK_SCRIPT).toContain("repeat with candidateTrack in allTracks");
+    expect(REFRESH_TRACK_SCRIPT).toContain("database ID of candidateTrack");
   });
 });
 

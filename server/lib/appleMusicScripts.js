@@ -274,6 +274,8 @@ export const REFRESH_TRACK_SCRIPT = `on run argv
   set artPath to item 11 of argv
   set relinkPath to ""
   if (count of argv) > 11 then set relinkPath to item 12 of argv
+  set knownPath to ""
+  if (count of argv) > 12 then set knownPath to item 13 of argv
   set US to (character id 31)
   tell application "Music"
     set foundTrack to missing value
@@ -291,19 +293,32 @@ export const REFRESH_TRACK_SCRIPT = `on run argv
     end if
     if foundTrack is missing value then
       set allTracks to (every file track of library playlist 1)
-      set locList to {}
-      try
-        set locList to (get location of allTracks)
-      end try
-      repeat with i from 1 to (count of locList)
-        set lc to contents of (item i of locList)
-        if lc is not missing value then
-          considering case and diacriticals
-            if (POSIX path of lc) is p then
-              set foundTrack to item i of allTracks
-              exit repeat
+      repeat with candidateTrack in allTracks
+        set identityMatch to false
+        if dbid is not "" then
+          try
+            if ((database ID of candidateTrack) as text) is dbid then set identityMatch to true
+          end try
+        end if
+        if not identityMatch and pid is not "" then
+          try
+            if (persistent ID of candidateTrack) is pid then set identityMatch to true
+          end try
+        end if
+        if not identityMatch then
+          try
+            set lc to location of candidateTrack
+            if lc is not missing value then
+              set candidatePath to POSIX path of lc
+              considering case and diacriticals
+                if candidatePath is p or (knownPath is not "" and candidatePath is knownPath) then set identityMatch to true
+              end considering
             end if
-          end considering
+          end try
+        end if
+        if identityMatch then
+          set foundTrack to contents of candidateTrack
+          exit repeat
         end if
       end repeat
     end if
@@ -435,17 +450,17 @@ export const RECONCILE_PLAYLIST_SCRIPT = `on run argv
     end try
     set total to (count of tracks of pl)
     if (count of idxList) is greater than or equal to total then return ("ABORT" & US & "refusing to empty the playlist")
-    set removed to 0
+    set removedCount to 0
     repeat with rawIdx in idxList
       set i to (rawIdx as integer)
       if i > 0 and i is less than or equal to (count of tracks of pl) then
         try
           delete track i of pl
-          set removed to removed + 1
+          set removedCount to removedCount + 1
         end try
       end if
     end repeat
-    return ("OK" & US & (removed as text))
+    return ("OK" & US & (removedCount as text))
   end tell
 end run`;
 
